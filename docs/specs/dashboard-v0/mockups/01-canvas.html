@@ -1,0 +1,148 @@
+<meta charset="utf-8">
+<title>Gridmason Dashboard — Page Canvas</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#f6f7f9; --paper-2:#eef0f3; --ink:#181b20; --ink-soft:#5b636e;
+    --copper:#c2691f; --amber:#d0842f; --line:#e3e6ea; --card:#ffffff; --code:#f2f4f6;
+    --ok:#2f855a; --warn:#c2691f;
+  }
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389; --warn:#e28940;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389; --warn:#e28940;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--ink);background:var(--paper);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .mono{font-family:ui-monospace,'JetBrains Mono',Menlo,monospace}
+  header.topbar{display:flex;align-items:center;gap:16px;padding:12px 22px;border-bottom:1px solid var(--line);background:var(--paper-2);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:18px}
+  .brand svg{width:26px;height:26px}
+  .brand span{color:var(--copper)}
+  .crumb{color:var(--ink-soft);font-size:13px}
+  .crumb b{color:var(--ink)}
+  .spacer{flex:1}
+  .pill{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;padding:4px 9px;border:1px solid var(--line);border-radius:999px;color:var(--ink-soft);background:var(--card)}
+  .btn{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:7px 13px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+  .btn.primary{background:var(--copper);border-color:var(--copper);color:#fff}
+  .btn:hover{border-color:var(--copper);color:var(--copper)}
+  .btn.primary:hover{color:#fff;filter:brightness(1.05)}
+  .tabs{display:flex;gap:2px;padding:10px 22px 0;border-bottom:1px solid var(--line);background:var(--paper-2)}
+  .tab{padding:8px 15px;font-size:14px;color:var(--ink-soft);border:1px solid transparent;border-bottom:none;border-radius:7px 7px 0 0;cursor:pointer}
+  .tab.on{color:var(--ink);background:var(--paper);border-color:var(--line);font-weight:600}
+  .tab.on::before{content:"";display:inline-block}
+  main{padding:22px;max-width:1180px;margin:0 auto}
+  #page-canvas{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;grid-auto-rows:96px}
+  .widget{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;position:relative;overflow:hidden;display:flex;flex-direction:column}
+  .widget::after{content:"";position:absolute;inset:0;pointer-events:none;box-shadow:inset 0 1px 0 rgba(255,255,255,.15)}
+  .whead{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+  .wtitle{font-size:13.5px;font-weight:600;letter-spacing:.01em}
+  .wsrc{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;letter-spacing:.06em;color:var(--ink-soft);margin-left:auto}
+  .lock{color:var(--copper);font-size:11px}
+  .kpi{font-size:34px;font-weight:600;letter-spacing:-.02em;line-height:1;margin:6px 0 2px}
+  .kpi small{font-size:14px;color:var(--ok);font-weight:600;margin-left:6px}
+  .sub{font-size:12px;color:var(--ink-soft)}
+  .spark{margin-top:auto;display:flex;align-items:flex-end;gap:3px;height:34px}
+  .spark i{flex:1;background:linear-gradient(var(--amber),var(--copper));border-radius:2px 2px 0 0;opacity:.85}
+  .rows{margin-top:4px;font-size:12.5px}
+  .rows div{display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px dashed var(--line)}
+  .rows div:last-child{border:none}
+  .badge{font-family:ui-monospace,Menlo,monospace;font-size:9px;letter-spacing:.08em;text-transform:uppercase;padding:2px 6px;border-radius:4px;border:1px solid var(--line);color:var(--ink-soft)}
+  .badge.side{border-color:var(--amber);color:var(--warn)}
+  .fallback{background:repeating-linear-gradient(45deg,var(--card),var(--card) 10px,var(--paper-2) 10px,var(--paper-2) 20px);align-items:center;justify-content:center;text-align:center;gap:8px}
+  .fallback .fx{font-size:13px;color:var(--ink-soft)}
+  .legend{max-width:1180px;margin:26px auto 40px;padding:14px 18px;border:1px dashed var(--line);border-radius:10px;background:var(--card);font-size:12.5px;color:var(--ink-soft)}
+  .legend b{color:var(--ink)}
+  .legend .mono{color:var(--copper)}
+  .themebtn{margin-left:6px}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 128 128" aria-hidden="true"><rect x="34" y="34" width="30" height="30" rx="6" fill="#C9762B"/><rect x="34" y="70" width="30" height="30" rx="6" fill="#A85A1F"/><rect x="70" y="70" width="30" height="30" rx="6" fill="#C9762B"/><rect x="76" y="20" width="30" height="30" rx="6" fill="#E3A857" transform="rotate(8 91 35)"/></svg>
+    grid<span>mason</span>
+  </div>
+  <span class="crumb">page&nbsp;·&nbsp;<b>dashboards.home</b></span>
+  <span class="pill">context: none</span>
+  <div class="spacer"></div>
+  <span class="pill">verified ✓ 6 remotes</span>
+  <button class="btn">Reset layout</button>
+  <button class="btn primary">Edit</button>
+  <button class="btn themebtn" id="themeBtn">☀ / ☾</button>
+</header>
+
+<div class="tabs">
+  <div class="tab on">Overview</div>
+  <div class="tab">Ops</div>
+  <div class="tab">Billing</div>
+</div>
+
+<main>
+  <section id="page-canvas" aria-label="Page canvas — grid of widgets">
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 2">
+      <div class="whead"><span class="wtitle">Sales this month</span><span class="wsrc">flagship · acme-sales-chart</span></div>
+      <div class="kpi">$248.5k<small>▲ 12%</small></div>
+      <div class="sub">vs. $221.9k prior period</div>
+      <div class="spark"><i style="height:40%"></i><i style="height:55%"></i><i style="height:48%"></i><i style="height:70%"></i><i style="height:62%"></i><i style="height:85%"></i><i style="height:78%"></i><i style="height:96%"></i></div>
+    </article>
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 2">
+      <div class="whead"><span class="wtitle">Open tickets</span><span class="wsrc">flagship · acme-queue</span></div>
+      <div class="rows">
+        <div><span>Critical</span><b>3</b></div>
+        <div><span>High</span><b>11</b></div>
+        <div><span>Normal</span><b>42</b></div>
+        <div><span>Waiting on customer</span><b>7</b></div>
+      </div>
+    </article>
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 1">
+      <div class="whead"><span class="lock">🔒</span><span class="wtitle">Uptime</span><span class="wsrc">local · gm-status</span></div>
+      <div class="kpi" style="font-size:26px">99.98%</div>
+      <div class="sub">30-day rolling · SLA 99.9%</div>
+    </article>
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 1">
+      <div class="whead"><span class="wtitle">Notes</span><span class="badge side">sideload</span><span class="wsrc">sideload · localhost</span></div>
+      <div class="sub" style="font-style:italic">Standup moved to 10:15. Registry migration lands Thursday — pin <span class="mono" style="font-family:ui-monospace">stable-2026.07</span> version set.</div>
+    </article>
+
+    <article class="widget fallback" style="grid-column:span 4;grid-row:span 1">
+      <div class="fx">⚠ <b>Latency Map</b> failed to load</div>
+      <button class="btn">Retry</button>
+    </article>
+
+    <article class="widget" style="grid-column:span 8;grid-row:span 2">
+      <div class="whead"><span class="wtitle">Revenue by region</span><span class="wsrc">flagship · acme-sales-chart</span></div>
+      <div class="spark" style="height:100%;align-items:flex-end">
+        <i style="height:30%"></i><i style="height:52%"></i><i style="height:44%"></i><i style="height:68%"></i><i style="height:59%"></i><i style="height:80%"></i><i style="height:72%"></i><i style="height:91%"></i><i style="height:64%"></i><i style="height:77%"></i><i style="height:88%"></i><i style="height:99%"></i>
+      </div>
+    </article>
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 2">
+      <div class="whead"><span class="wtitle">Clock</span><span class="wsrc">flagship · gm-clock</span></div>
+      <div class="kpi mono" style="font-size:30px">14:32:08</div>
+      <div class="sub">America/Chicago · CDT</div>
+      <div class="rows" style="margin-top:14px">
+        <div><span>London</span><b>20:32</b></div>
+        <div><span>Tokyo</span><b>04:32</b></div>
+      </div>
+    </article>
+
+  </section>
+</main>
+
+<div class="legend">
+  <b>Mockup 01 — Page Canvas (dashboards.home).</b> Every tile is a signed custom-element widget mounted by core's <span class="mono">PageCanvas</span>. Each shows its <b>source-qualified identity</b> (<span class="mono">flagship&nbsp;·&nbsp;tag</span>, <span class="mono">local</span>, or a distinctly-badged <span class="mono">sideload</span>). The 🔒 tile is a <b>locked slot</b> (page-type governance). The hatched tile is the <b>per-widget error boundary</b> — one widget's load failure never blocks the canvas or its siblings.
+</div>
+
+<script>
+document.getElementById('themeBtn').addEventListener('click',()=>{const r=document.documentElement;const d=r.getAttribute('data-theme')==='dark'||(!r.getAttribute('data-theme')&&matchMedia('(prefers-color-scheme: dark)').matches);r.setAttribute('data-theme',d?'light':'dark');});
+</script>

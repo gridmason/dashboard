@@ -1,0 +1,110 @@
+<meta charset="utf-8">
+<title>Gridmason Dashboard — Add-Widget Picker</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#f6f7f9; --paper-2:#eef0f3; --ink:#181b20; --ink-soft:#5b636e;
+    --copper:#c2691f; --amber:#d0842f; --line:#e3e6ea; --card:#ffffff; --code:#f2f4f6;
+    --ok:#2f855a;
+  }
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--ink);background:var(--paper);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased;min-height:100vh}
+  .mono{font-family:ui-monospace,'JetBrains Mono',Menlo,monospace}
+  .scrim{position:fixed;inset:0;background:rgba(20,15,10,.34);backdrop-filter:blur(2px);display:flex;align-items:flex-start;justify-content:center;padding:40px 20px}
+  .sheet{width:min(920px,100%);background:var(--paper);border:1px solid var(--line);border-radius:14px;box-shadow:0 30px 80px rgba(0,0,0,.35);overflow:hidden}
+  .sheet header{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line);background:var(--paper-2)}
+  .sheet header h2{font-size:19px;margin:0;font-weight:600}
+  .ctx{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-soft);border:1px solid var(--line);border-radius:999px;padding:4px 10px;background:var(--card)}
+  .ctx b{color:var(--copper)}
+  .spacer{flex:1}
+  .close{width:30px;height:30px;border:1px solid var(--line);border-radius:7px;background:var(--card);cursor:pointer;color:var(--ink-soft);font-size:15px}
+  .search{padding:14px 20px;border-bottom:1px solid var(--line)}
+  .search input{width:100%;padding:10px 14px;border:1px solid var(--line);border-radius:9px;background:var(--card);color:var(--ink);font-family:inherit;font-size:15px}
+  .search input::placeholder{color:var(--ink-soft)}
+  .grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;padding:18px 20px;max-height:60vh;overflow-y:auto}
+  .card{border:1px solid var(--line);border-radius:11px;background:var(--card);padding:13px 14px;cursor:pointer;position:relative;display:flex;flex-direction:column;gap:6px}
+  .card:hover{border-color:var(--copper);box-shadow:0 6px 18px rgba(0,0,0,.1)}
+  .thumb{height:56px;border-radius:7px;background:linear-gradient(135deg,var(--paper-2),var(--code));display:grid;place-items:center;color:var(--copper);font-size:22px;border:1px solid var(--line)}
+  .cn{font-size:14px;font-weight:600;display:flex;align-items:center;gap:6px}
+  .cs{font-family:ui-monospace,Menlo,monospace;font-size:9.5px;color:var(--ink-soft)}
+  .cd{font-size:12px;color:var(--ink-soft);line-height:1.4}
+  .tags{display:flex;flex-wrap:wrap;gap:5px;margin-top:auto}
+  .tag{font-family:ui-monospace,Menlo,monospace;font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;padding:2px 6px;border-radius:4px;border:1px solid var(--line);color:var(--ink-soft)}
+  .tag.side{border-color:var(--amber);color:var(--copper);background:color-mix(in srgb,var(--amber) 12%,transparent)}
+  .tag.ok{border-color:var(--ok);color:var(--ok)}
+  .divider{grid-column:1/-1;font-family:ui-monospace,Menlo,monospace;font-size:10px;letter-spacing:.16em;text-transform:uppercase;color:var(--copper);padding:6px 2px 0;border-top:1px dashed var(--line);margin-top:6px}
+  .note{grid-column:1/-1;font-size:12.5px;color:var(--ink-soft);background:var(--code);border:1px dashed var(--line);border-radius:9px;padding:11px 14px;line-height:1.5}
+  .note b{color:var(--ink)}
+  footer.ft{padding:12px 20px;border-top:1px solid var(--line);background:var(--paper-2);font-size:12px;color:var(--ink-soft);display:flex;gap:8px;align-items:center}
+</style>
+
+<div class="scrim">
+  <div class="sheet" role="dialog" aria-label="Add widget">
+    <header>
+      <h2>Add widget</h2>
+      <span class="ctx">page <b>crm.customer-detail</b> · context: <b>record:customer</b></span>
+      <div class="spacer"></div>
+      <button class="close" aria-label="Close">✕</button>
+    </header>
+    <div class="search"><input placeholder="Search widgets you can add…" aria-label="Search widgets"></div>
+
+    <div class="grid" aria-label="Eligible widgets">
+
+      <div class="divider">Flagship · registry.gridmason.dev</div>
+
+      <div class="card">
+        <div class="thumb">▤</div>
+        <div class="cn">Record Summary</div>
+        <div class="cs">flagship · acme-record-summary</div>
+        <div class="cd">Header card for the current customer record.</div>
+        <div class="tags"><span class="tag ok">context ✓</span><span class="tag">records.read</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb">◔</div>
+        <div class="cn">Sales Chart</div>
+        <div class="cs">flagship · acme-sales-chart</div>
+        <div class="cd">Revenue trend for this customer, settings-driven.</div>
+        <div class="tags"><span class="tag ok">context ✓</span><span class="tag">records.read</span></div>
+      </div>
+
+      <div class="card">
+        <div class="thumb">✎</div>
+        <div class="cn">Markdown Note</div>
+        <div class="cs">flagship · gm-markdown</div>
+        <div class="cd">Static rich-text note. No data capabilities.</div>
+        <div class="tags"><span class="tag ok">no context</span></div>
+      </div>
+
+      <div class="divider">Sideloaded · owner-acknowledged</div>
+
+      <div class="card">
+        <div class="thumb">◈</div>
+        <div class="cn">Field Notes <span class="tag side">sideload</span></div>
+        <div class="cs">sideload · https://widgets.internal.acme</div>
+        <div class="cd">Unreviewed. Loaded because the deploy owner acknowledged this origin.</div>
+        <div class="tags"><span class="tag ok">context ✓</span><span class="tag side">unreviewed</span></div>
+      </div>
+
+      <div class="note">
+        <b>The picker shows only widgets that pass all four gates.</b> A widget appears here iff (1) its <span class="mono">requiresContext</span> ⊆ this page's <span class="mono">record:customer</span> context, (2) its <span class="mono">supportsPages</span> glob matches <span class="mono">crm.customer-detail</span>, (3) its distribution gate is on, and (4) you hold its data permissions. Widgets failing gate 3 or 4 are <b>absent, not greyed-out</b> — no capability leakage. <span class="mono">gm-clock</span> and <span class="mono">acme-team-roster</span> are hidden here: the clock supports only <span class="mono">dashboards.*</span>, and the roster requires <span class="mono">team</span> context this page doesn't provide.
+      </div>
+
+    </div>
+
+    <footer class="ft">
+      <span class="mono" style="color:var(--copper)">4 eligible</span> · 2 hidden by context/page · 0 hidden by permission on this page
+    </footer>
+  </div>
+</div>

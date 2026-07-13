@@ -1,0 +1,144 @@
+<meta charset="utf-8">
+<title>Gridmason Dashboard — Edit Mode</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{
+    --paper:#f6f7f9; --paper-2:#eef0f3; --ink:#181b20; --ink-soft:#5b636e;
+    --copper:#c2691f; --amber:#d0842f; --line:#e3e6ea; --card:#ffffff; --code:#f2f4f6;
+    --ok:#2f855a;
+  }
+  @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389;
+  }}
+  :root[data-theme="dark"]{
+    --paper:#0f1115; --paper-2:#181b21; --ink:#e7e9ec; --ink-soft:#98a1ac;
+    --copper:#e28940; --amber:#e6a15c; --line:#282d36; --card:#171a20; --code:#1b1f26;
+    --ok:#5fb389;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;color:var(--ink);background:var(--paper);
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif;font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+  .mono{font-family:ui-monospace,'JetBrains Mono',Menlo,monospace}
+  header.topbar{display:flex;align-items:center;gap:16px;padding:12px 22px;border-bottom:2px solid var(--copper);background:var(--paper-2);position:sticky;top:0;z-index:5}
+  .brand{display:flex;align-items:center;gap:9px;font-weight:600;font-size:18px}
+  .brand svg{width:26px;height:26px}
+  .brand span{color:var(--copper)}
+  .editflag{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:#fff;background:var(--copper);padding:4px 11px;border-radius:999px}
+  .spacer{flex:1}
+  .btn{font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.08em;text-transform:uppercase;padding:7px 13px;border:1px solid var(--line);border-radius:6px;background:var(--card);color:var(--ink);cursor:pointer}
+  .btn.primary{background:var(--copper);border-color:var(--copper);color:#fff}
+  .btn:hover{border-color:var(--copper);color:var(--copper)}
+  .btn.primary:hover{color:#fff}
+  .toolbar{display:flex;align-items:center;gap:10px;padding:10px 22px;background:var(--paper-2);border-bottom:1px solid var(--line);font-size:12.5px;color:var(--ink-soft)}
+  .toolbar .mono{color:var(--copper)}
+  main{padding:22px;max-width:1180px;margin:0 auto}
+  #page-canvas{display:grid;grid-template-columns:repeat(12,1fr);gap:14px;grid-auto-rows:96px;position:relative}
+  /* edit-mode grid guides */
+  main{position:relative}
+  .widget{background:var(--card);border:1px dashed var(--copper);border-radius:10px;padding:12px 14px;position:relative;cursor:grab;display:flex;flex-direction:column}
+  .widget.locked{border-style:solid;border-color:var(--line);cursor:not-allowed}
+  .widget.dragging{outline:2px solid var(--copper);outline-offset:2px;opacity:.9;box-shadow:0 12px 30px rgba(0,0,0,.18)}
+  .whead{display:flex;align-items:center;gap:7px;margin-bottom:6px}
+  .grip{cursor:grab;color:var(--ink-soft);font-size:14px;letter-spacing:-2px}
+  .wtitle{font-size:13px;font-weight:600}
+  .wsrc{font-family:ui-monospace,Menlo,monospace;font-size:9px;color:var(--ink-soft);margin-left:auto}
+  .wtools{display:flex;gap:5px}
+  .wtool{width:22px;height:22px;display:grid;place-items:center;border:1px solid var(--line);border-radius:5px;font-size:11px;background:var(--paper);color:var(--ink-soft);cursor:pointer}
+  .wtool:hover{border-color:var(--copper);color:var(--copper)}
+  .body-fill{flex:1;background:repeating-linear-gradient(45deg,transparent,transparent 9px,color-mix(in srgb,var(--ink-soft) 22%,transparent) 9px,color-mix(in srgb,var(--ink-soft) 22%,transparent) 10px);border-radius:6px;margin-top:2px;min-height:24px}
+  .resize{position:absolute;right:3px;bottom:3px;width:14px;height:14px;border-right:2px solid var(--copper);border-bottom:2px solid var(--copper);opacity:.6}
+  .lock{color:var(--copper)}
+  .locknote{font-family:ui-monospace,Menlo,monospace;font-size:9px;color:var(--ink-soft);margin-top:auto}
+  /* drop-target ghost */
+  .ghost{grid-column:span 4;grid-row:span 2;border:2px dashed var(--amber);border-radius:10px;background:color-mix(in srgb,var(--amber) 12%,transparent);display:grid;place-items:center;color:var(--copper);font-family:ui-monospace,Menlo,monospace;font-size:11px;letter-spacing:.08em}
+  .addcard{grid-column:span 4;grid-row:span 2;border:2px dashed var(--line);border-radius:10px;background:var(--card);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;cursor:pointer;color:var(--ink-soft)}
+  .addcard:hover{border-color:var(--copper);color:var(--copper)}
+  .addcard .plus{font-size:30px;line-height:1}
+  .a11y{max-width:1180px;margin:20px auto 40px;display:flex;gap:14px;flex-wrap:wrap}
+  .a11y .note{flex:1;min-width:260px;border:1px dashed var(--line);border-radius:10px;background:var(--card);padding:14px 16px;font-size:12.5px;color:var(--ink-soft)}
+  .a11y .note b{color:var(--ink)}
+  .a11y .mono{color:var(--copper)}
+  kbd{font-family:ui-monospace,Menlo,monospace;font-size:11px;background:var(--code);border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:1px 6px;color:var(--ink)}
+</style>
+
+<header class="topbar">
+  <div class="brand">
+    <svg viewBox="0 0 128 128" aria-hidden="true"><rect x="34" y="34" width="30" height="30" rx="6" fill="#C9762B"/><rect x="34" y="70" width="30" height="30" rx="6" fill="#A85A1F"/><rect x="70" y="70" width="30" height="30" rx="6" fill="#C9762B"/><rect x="76" y="20" width="30" height="30" rx="6" fill="#E3A857" transform="rotate(8 91 35)"/></svg>
+    grid<span>mason</span>
+  </div>
+  <span class="editflag">● Editing layout</span>
+  <div class="spacer"></div>
+  <button class="btn">Discard</button>
+  <button class="btn">Reset to org default</button>
+  <button class="btn primary">Save layout</button>
+</header>
+
+<div class="toolbar">
+  <span>Drag to move · drag corner to resize · <kbd>M</kbd> move-mode then <kbd>← ↑ → ↓</kbd> for keyboard placement.</span>
+  <span class="spacer" style="flex:1"></span>
+  <span>Snap: <span class="mono">12-col</span> · Tabs: <span class="mono">allowed</span></span>
+</div>
+
+<main>
+  <section id="page-canvas" aria-label="Page canvas in edit mode">
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 2" tabindex="0">
+      <div class="whead"><span class="grip">⋮⋮</span><span class="wtitle">Sales this month</span><span class="wsrc">flagship · acme-sales-chart</span></div>
+      <div class="wtools" style="position:absolute;top:10px;right:12px">
+        <span class="wtool" title="Settings">⚙</span><span class="wtool" title="Remove">✕</span>
+      </div>
+      <div class="body-fill"></div>
+      <div class="resize"></div>
+    </article>
+
+    <article class="widget dragging" style="grid-column:span 4;grid-row:span 2" tabindex="0">
+      <div class="whead"><span class="grip">⋮⋮</span><span class="wtitle">Open tickets</span><span class="wsrc">flagship · acme-queue</span></div>
+      <div class="wtools" style="position:absolute;top:10px;right:12px">
+        <span class="wtool" title="Settings">⚙</span><span class="wtool" title="Remove">✕</span>
+      </div>
+      <div class="body-fill"></div>
+      <div class="resize"></div>
+    </article>
+
+    <div class="ghost">drop here · 4×2</div>
+
+    <article class="widget locked" style="grid-column:span 4;grid-row:span 1" tabindex="0">
+      <div class="whead"><span class="lock">🔒</span><span class="wtitle">Uptime</span><span class="wsrc">local · gm-status</span></div>
+      <div class="locknote">locked by org layout — cannot move/remove</div>
+    </article>
+
+    <article class="widget" style="grid-column:span 4;grid-row:span 1" tabindex="0">
+      <div class="whead"><span class="grip">⋮⋮</span><span class="wtitle">Notes</span><span class="wsrc">sideload · localhost</span></div>
+      <div class="wtools" style="position:absolute;top:9px;right:12px"><span class="wtool">⚙</span><span class="wtool">✕</span></div>
+      <div class="body-fill"></div>
+      <div class="resize"></div>
+    </article>
+
+    <article class="widget" style="grid-column:span 8;grid-row:span 2" tabindex="0">
+      <div class="whead"><span class="grip">⋮⋮</span><span class="wtitle">Revenue by region</span><span class="wsrc">flagship · acme-sales-chart</span></div>
+      <div class="wtools" style="position:absolute;top:10px;right:12px"><span class="wtool">⚙</span><span class="wtool">✕</span></div>
+      <div class="body-fill"></div>
+      <div class="resize"></div>
+    </article>
+
+    <div class="addcard" style="grid-column:span 4;grid-row:span 2" role="button" aria-label="Add widget">
+      <span class="plus">＋</span>
+      <span class="mono" style="font-size:11px;letter-spacing:.08em">ADD WIDGET</span>
+    </div>
+
+  </section>
+</main>
+
+<div class="a11y">
+  <div class="note"><b>Locked slots merge down.</b> The 🔒 <span class="mono">Uptime</span> tile is bound to a page-type <span class="mono">slot</span> and locked by the org layout — it can't be moved, resized, or removed below the level that locked it. Everything else is freely editable and <b>copy-on-write</b>: the first edit forks a personal layout from the org default.</div>
+  <div class="note"><b>Keyboard-first, WCAG 2.1 AA in edit mode.</b> Every tile is focusable; <kbd>M</kbd> enters move-mode and arrow keys reposition on the grid — no pointer required. Edit actions announce via live region. This is the accessible alternative to gridstack drag.</div>
+</div>
+
+<script>
+document.querySelectorAll('.widget:not(.locked)').forEach(w=>{
+  w.addEventListener('mousedown',()=>w.classList.add('dragging'));
+  document.addEventListener('mouseup',()=>w.classList.remove('dragging'));
+});
+</script>
