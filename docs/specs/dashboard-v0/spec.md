@@ -166,3 +166,17 @@ Depends on: D-E3; sdk S-E3
 ## Changelog
 
 - 2026-07-13 — initial draft from the approved engineering spec set.
+
+## Issue map
+
+Created in `gridmason/dashboard` from this spec package (spec-to-issues run, 2026-07-13). Marker `<!-- spec:dashboard-v0 -->` on every issue.
+
+| Epic | Issue | Phase | Sub-issues |
+|---|---|---|---|
+| D-E0 Bootstrap | [#1](https://github.com/gridmason/dashboard/issues/1) | A | [#2](https://github.com/gridmason/dashboard/issues/2) App scaffold + CI · [#3](https://github.com/gridmason/dashboard/issues/3) Demo API skeleton + KV + config/login |
+| D-E1 Static boot | [#4](https://github.com/gridmason/dashboard/issues/4) | A | [#5](https://github.com/gridmason/dashboard/issues/5) PageCanvas + page types · [#6](https://github.com/gridmason/dashboard/issues/6) Demo widgets · [#7](https://github.com/gridmason/dashboard/issues/7) Interim SDK handle · [#8](https://github.com/gridmason/dashboard/issues/8) Layout persistence + CoW · [#9](https://github.com/gridmason/dashboard/issues/9) Governance demo |
+| D-E2 Dev loop + sideload | [#10](https://github.com/gridmason/dashboard/issues/10) | A | [#11](https://github.com/gridmason/dashboard/issues/11) `dev` sideload · [#12](https://github.com/gridmason/dashboard/issues/12) `acknowledged` sideload · [#13](https://github.com/gridmason/dashboard/issues/13) Honesty docs + `off` + e2e |
+| D-E3 Federated boot | [#14](https://github.com/gridmason/dashboard/issues/14) | B | [#15](https://github.com/gridmason/dashboard/issues/15) Gate snapshot + resolution + import map · [#16](https://github.com/gridmason/dashboard/issues/16) Lazy verified mount · [#17](https://github.com/gridmason/dashboard/issues/17) Revocation feed |
+| D-E4 Hardening | [#18](https://github.com/gridmason/dashboard/issues/18) | B | [#19](https://github.com/gridmason/dashboard/issues/19) Service Worker verify · [#20](https://github.com/gridmason/dashboard/issues/20) CSP + scoped-fetch proxy · [#21](https://github.com/gridmason/dashboard/issues/21) Token + instance identity · [#22](https://github.com/gridmason/dashboard/issues/22) Telemetry + NFR gate |
+
+Phase A sub-issues (D-E0…D-E2, #2–#13) ship `status:ready`. Phase B sub-issues (D-E3…D-E4, #15–#22) ship `status:blocked` — milestone-gated until Phase A exit (SCOPE guardrail 1).
