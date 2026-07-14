@@ -1,0 +1,23 @@
+{
+  "users": [
+    {
+      "id": "alice",
+      "username": "alice",
+      "password": "alice-dev-password",
+      "displayName": "Alice Admin",
+      "roles": ["admin"]
+    },
+    {
+      "id": "bob",
+      "username": "bob",
+      "password": "bob-dev-password",
+      "displayName": "Bob Member",
+      "roles": ["member"]
+    }
+  ],
+  "gates": {
+    "widgets.chart": true,
+    "widgets.crasher": false,
+    "governance.publish": true
+  }
+}
