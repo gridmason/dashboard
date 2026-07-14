@@ -63,7 +63,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       // what recomputes them. Dispatching gridstack's window-resize handler once,
       // after the layout is applied, triggers that recompute so the grid reaches
       // full width without a lingering collapsed state. Idempotent and harmless;
-      // remove once the core binding lays out correctly on mount (gridmason/core).
+      // remove once the core binding lays out correctly on mount (gridmason/core#63).
       requestAnimationFrame(() => {
         if (active && ref.current === el) window.dispatchEvent(new Event('resize'));
       });
