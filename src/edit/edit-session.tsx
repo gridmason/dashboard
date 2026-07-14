@@ -227,13 +227,16 @@ export function EditSessionProvider({
       if (epochRef.current !== epoch) return;
       const composed = composeEffective(pageType, org, override);
       // Register the composed layout's first-party widget modules before binding the
-      // controller: `new EditController` syncs the layout onto the canvas synchronously
-      // in its constructor, and core's widget boundary sends any tag still undefined at
-      // that mount straight to its permanent "unavailable" card (a survivor is never
-      // re-upgraded). CanvasHost also loads these (idempotently) but sets the layout only
-      // after awaiting — the controller does not, so without this preload a first-party
-      // widget can lose the import race and stick as a fallback card. Sideload remotes
-      // are already defined at registration time, so the first-party map suffices here.
+      // controller. `new EditController` syncs the layout onto the canvas synchronously in
+      // its constructor, so a first-party tag still undefined at that mount loses the import
+      // race. As of core ≥0.5.2 this is a UX optimization, not a correctness requirement:
+      // core's widget boundary now auto-recovers a widget whose custom element is defined
+      // after mount (upgrading the card and emitting `widget.recovery`, gridmason/core#79),
+      // so a lost race self-heals. The preload just skips the visible "unavailable" card
+      // flash before that upgrade lands. CanvasHost also loads these (idempotently) but sets
+      // the layout only after awaiting; the controller does not, hence preloading here.
+      // Sideload remotes are already defined at registration time, so the first-party map
+      // suffices.
       await loadWidgetsForLayout(assembleImportMap(), composed.layout);
       if (epochRef.current !== epoch) return;
       setEffective(composed);
