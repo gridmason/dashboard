@@ -19,6 +19,7 @@ import type { PageRef } from '../routes';
 import { useDevSideload } from './DevSideloadContext';
 import { useAcknowledgedSideload } from './AcknowledgedSideloadContext';
 import { ACKNOWLEDGED_BADGE_LABEL, SIDELOAD_BADGE_LABEL } from './source';
+import { SIDELOAD_NO_VERIFY_CAVEAT } from './policy';
 import type { DevSideloadRemote } from './allowlist-store';
 import type { AcknowledgedRemote } from './acknowledged-store';
 
@@ -52,7 +53,7 @@ function AcknowledgedSection({
 }: {
   onClose: () => void;
 }): React.JSX.Element {
-  const { remotes, register, remove, loadModule, notePlacement } = useAcknowledgedSideload();
+  const { enabled, remotes, register, remove, loadModule, notePlacement } = useAcknowledgedSideload();
   const { addWidget } = useEditSession();
   const [url, setUrl] = useState('');
   const [acknowledged, setAcknowledged] = useState(false);
@@ -92,6 +93,21 @@ function AcknowledgedSection({
     }
   }
 
+  // Acknowledged mode off (the default posture, SPEC §4): no registration loads,
+  // so there is nothing to register or place. Say so plainly rather than showing a
+  // register form that would silently never load anything.
+  if (!enabled) {
+    return (
+      <>
+        <div className="gm-sl-divider">Sideloaded · owner-acknowledged</div>
+        <p className="gm-sl-empty">
+          Acknowledged sideload is off (the default). No acknowledged remote loads until the
+          deploy sets its sideload mode to <code>acknowledged</code>.
+        </p>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="gm-sl-divider">Sideloaded · owner-acknowledged</div>
@@ -119,8 +135,7 @@ function AcknowledgedSection({
           aria-label="Acknowledge unreviewed code"
         />
         <span>
-          I acknowledge this is <b>unreviewed</b> code — Gridmason has{' '}
-          <b>no verification chain yet</b>, so I only register remotes I built or reviewed myself.
+          I acknowledge this is <b>unreviewed</b> code: {SIDELOAD_NO_VERIFY_CAVEAT}.
         </span>
       </label>
 
@@ -238,9 +253,8 @@ export function AddWidgetPicker({
             // there is no verification chain yet.
             <div className="gm-sl-ack">
               <b>Dev sideload — unreviewed code.</b> Widgets loaded from a{' '}
-              <code>gridmason dev</code> server bypass registry review, and Gridmason has{' '}
-              <b>no verification chain yet</b>. Only enable this for widgets you built or
-              reviewed yourself. Nothing here is persisted — it is gone on reload.
+              <code>gridmason dev</code> server bypass registry review: {SIDELOAD_NO_VERIFY_CAVEAT}.
+              Nothing here is persisted — it is gone on reload.
               <div>
                 <button
                   type="button"

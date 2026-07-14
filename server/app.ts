@@ -31,14 +31,18 @@
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AuthService, SessionUser } from './auth/index';
-import type { DemoConfig } from './config/index';
+import { sideloadMode, type DemoConfig } from './config/index';
 import { isLayoutDoc, type LayoutKey, type LayoutStore } from './layout-store/index';
 import {
   isOrgPublication,
   type GovernanceKey,
   type GovernanceStore,
 } from './governance-store/index';
-import { parseRegistrationInput, type SideloadRegistrationStore } from './sideload-store/index';
+import {
+  acknowledgedScriptSrc,
+  parseRegistrationInput,
+  type SideloadRegistrationStore,
+} from './sideload-store/index';
 import {
   BadRequestError,
   clearSessionCookie,
@@ -296,9 +300,18 @@ async function handleSideload(
 
   // Reading the acknowledged registrations needs only a session — the dashboard
   // client fetches them to assemble the import map and badge sideloaded cards, and
-  // the list is the config-visible record of which origins an owner permitted.
+  // the list is the config-visible record of which origins an owner permitted. The
+  // response also reports the configured `mode` and the `scriptSrc` origins the
+  // deployment's CSP permits under it — empty unless the mode is `acknowledged`, so
+  // the config record itself shows the production CSP is not relaxed by default.
   if (method === 'GET') {
-    sendJson(res, 200, { registrations: deps.sideload.list() });
+    const mode = sideloadMode(deps.config);
+    const registrations = deps.sideload.list();
+    sendJson(res, 200, {
+      mode,
+      registrations,
+      scriptSrc: acknowledgedScriptSrc(mode, registrations),
+    });
     return;
   }
 

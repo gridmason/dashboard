@@ -22,6 +22,7 @@
  */
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
+import type { SideloadMode } from '../config/index';
 
 /**
  * One acknowledged-sideload registration. `url` is the registered remote (its
@@ -116,6 +117,24 @@ export function parseRegistrationInput(value: unknown): ParsedRegistration {
   }
 
   return { ok: true, value: { url: parsed.href, origin: parsed.origin, hash, acknowledgedBy } };
+}
+
+/**
+ * The acknowledged origins the deployment's CSP may add to `script-src`, given the
+ * configured sideload `mode` (SPEC §4). This is the server-side, config-recorded
+ * authority the enforced production CSP reads (M3 hardening, SPEC §7/§9): **empty**
+ * unless the posture is explicitly `acknowledged`, so with the default `off` — or
+ * `dev`, whose relaxation is delivered separately and dev-only — no acknowledged
+ * origin is ever permitted and the production CSP is never relaxed. Origins are
+ * de-duplicated; a registration list only ever adds its own origins, never `'self'`
+ * or a wildcard.
+ */
+export function acknowledgedScriptSrc(
+  mode: SideloadMode,
+  registrations: readonly SideloadRegistration[],
+): readonly string[] {
+  if (mode !== 'acknowledged') return [];
+  return [...new Set(registrations.map((registration) => registration.origin))];
 }
 
 export class SideloadRegistrationStore {

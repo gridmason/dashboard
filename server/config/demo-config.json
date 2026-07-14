@@ -19,5 +19,8 @@
     "widgets.chart": true,
     "widgets.crasher": false,
     "governance.publish": true
+  },
+  "sideload": {
+    "mode": "off"
   }
 }

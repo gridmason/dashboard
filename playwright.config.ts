@@ -16,9 +16,11 @@ const API_URL = `http://localhost:${API_PORT}`;
  * Playwright harness (FR-16). Two app surfaces are exercised:
  *
  * - **`chromium`** runs the suite against the built static bundle served by
- *   `vite preview` — the real **production** output. The sideload **gate** spec
- *   lives here: it proves dev sideload is absent from a production build. It skips
- *   the dev-only sideload specs.
+ *   `vite preview` — the real **production** output, whose client sideload posture
+ *   is the default `off` (no `GRIDMASON_SIDELOAD_MODE`). The sideload **gate** spec
+ *   lives here: it proves dev sideload is absent from a production build **and** that
+ *   with the posture off a registered acknowledged remote never enters the import
+ *   map. It skips the dev-only sideload specs.
  * - **`chromium-dev`** runs the dev-sideload author-loop spec **and** the
  *   acknowledged-sideload spec against `vite dev` with the dev gate on
  *   (`GRIDMASON_DEV_SIDELOAD=1`, which turns on the dev-only CSP relaxation), plus
@@ -82,7 +84,11 @@ export default defineConfig({
       command: `npm run dev -- --port ${DEV_PORT} --strictPort`,
       // The dev gate on: the dev-sideload CSP plugin permits localhost dev-server
       // origins in `script-src` (the relaxation exists only while the gate is on).
-      env: { GRIDMASON_DEV_SIDELOAD: '1', GRIDMASON_DEMO_API: API_URL },
+      // `GRIDMASON_SIDELOAD_MODE=acknowledged` bakes the client `acknowledged`
+      // posture (src/sideload/policy.ts) so the acknowledged spec's register/place
+      // flow admits its remote — the preview surface leaves it unset, so its client
+      // posture stays `off` (the default) and the sideload-gate spec proves the block.
+      env: { GRIDMASON_DEV_SIDELOAD: '1', GRIDMASON_SIDELOAD_MODE: 'acknowledged', GRIDMASON_DEMO_API: API_URL },
       url: `http://localhost:${DEV_PORT}`,
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
