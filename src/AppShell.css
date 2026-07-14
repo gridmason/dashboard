@@ -1,0 +1,78 @@
+.gm-shell {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.gm-topbar {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 22px;
+  border-bottom: 1px solid var(--gm-line);
+  background: var(--gm-paper-2);
+  position: sticky;
+  top: 0;
+  z-index: 5;
+}
+
+.gm-brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-weight: 600;
+  font-size: 18px;
+}
+
+.gm-brand span {
+  color: var(--gm-copper);
+}
+
+.gm-crumb {
+  color: var(--gm-ink-soft);
+  font-size: 13px;
+}
+
+.gm-crumb b {
+  color: var(--gm-ink);
+}
+
+.gm-spacer {
+  flex: 1;
+}
+
+.gm-pill {
+  font-family: var(--gm-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 4px 9px;
+  border: 1px solid var(--gm-line);
+  border-radius: 999px;
+  color: var(--gm-ink-soft);
+  background: var(--gm-card);
+}
+
+.gm-themebtn {
+  font-family: var(--gm-font-mono);
+  font-size: 11px;
+  padding: 7px 11px;
+  border: 1px solid var(--gm-line);
+  border-radius: 6px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  cursor: pointer;
+}
+
+.gm-themebtn:hover {
+  border-color: var(--gm-copper);
+  color: var(--gm-copper);
+}
+
+.gm-main {
+  padding: 22px;
+  max-width: 1180px;
+  width: 100%;
+  margin: 0 auto;
+  flex: 1;
+}

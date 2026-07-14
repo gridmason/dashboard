@@ -1,0 +1,91 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main, 'epic/**']
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  # Release artifact (a): the static bundle. Also the type-check gate.
+  # CI fails here if the bundle build fails.
+  static-bundle:
+    name: Build static bundle
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: static-bundle
+          path: dist
+          if-no-files-found: error
+
+  # Release artifact (b): the deployable app image. Built but never pushed.
+  # CI fails here if the image build fails.
+  app-image:
+    name: Build app image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          load: true
+          tags: gridmason-dashboard:ci
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Playwright boot smoke test against the built bundle (FR-1, FR-16).
+  e2e:
+    name: E2E boot smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run build
+      - run: npm run e2e
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report
+          path: playwright-report
+          if-no-files-found: ignore
+
+  # Lighthouse CI perf pass over the built bundle. Stub gate for D-E0 — present
+  # and runs, non-blocking; the NFR budget is asserted in D-E4 (FR-16).
+  lighthouse:
+    name: Lighthouse CI (stub)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run lighthouse

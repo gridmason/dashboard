@@ -1,0 +1,23 @@
+/* Minimal global styles built entirely on the theme tokens (tokens.css). */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  color: var(--gm-ink);
+  background: var(--gm-paper);
+  font-family: var(--gm-font-sans);
+  font-size: 15px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}

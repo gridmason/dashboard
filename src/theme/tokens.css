@@ -1,0 +1,58 @@
+/*
+ * Default Gridmason theme — CSS custom properties only (SPEC §8, FR-1).
+ *
+ * This is the entire theming surface. A host re-themes Gridmason purely by
+ * overriding these custom properties (no build step, no component overrides);
+ * nothing downstream should hard-code a colour. Light is the default; dark
+ * follows the OS preference and can be forced either way with
+ * `:root[data-theme="light"|"dark"]`. Palette mirrors the design baseline in
+ * docs/specs/dashboard-v0/mockups/01-canvas.html.
+ */
+
+:root {
+  --gm-paper: #f6f7f9;
+  --gm-paper-2: #eef0f3;
+  --gm-ink: #181b20;
+  --gm-ink-soft: #5b636e;
+  --gm-copper: #c2691f;
+  --gm-amber: #d0842f;
+  --gm-line: #e3e6ea;
+  --gm-card: #ffffff;
+  --gm-code: #f2f4f6;
+  --gm-ok: #2f855a;
+  --gm-warn: #c2691f;
+
+  --gm-radius: 10px;
+  --gm-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+  --gm-font-mono: ui-monospace, 'JetBrains Mono', Menlo, monospace;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    --gm-paper: #0f1115;
+    --gm-paper-2: #181b21;
+    --gm-ink: #e7e9ec;
+    --gm-ink-soft: #98a1ac;
+    --gm-copper: #e28940;
+    --gm-amber: #e6a15c;
+    --gm-line: #282d36;
+    --gm-card: #171a20;
+    --gm-code: #1b1f26;
+    --gm-ok: #5fb389;
+    --gm-warn: #e28940;
+  }
+}
+
+:root[data-theme='dark'] {
+  --gm-paper: #0f1115;
+  --gm-paper-2: #181b21;
+  --gm-ink: #e7e9ec;
+  --gm-ink-soft: #98a1ac;
+  --gm-copper: #e28940;
+  --gm-amber: #e6a15c;
+  --gm-line: #282d36;
+  --gm-card: #171a20;
+  --gm-code: #1b1f26;
+  --gm-ok: #5fb389;
+  --gm-warn: #e28940;
+}
