@@ -42,7 +42,11 @@ npm run dev            # Vite dev server at http://localhost:5173
 | `npm run e2e` | Run the Playwright suite. Run `npm run build` first — the suite serves the built bundle. |
 | `npm run e2e:install` | Install the Playwright browser (Chromium) with OS deps. |
 | `npm run lighthouse` | Run the Lighthouse CI perf pass over the built bundle. |
-| `npm test` | Run unit tests (Vitest). |
+| `npm test` | Run unit tests (Vitest) — app source and the demo API. |
+| `npm run api:dev` | Run the demo API with reload (`tsx watch`), default port 8787. |
+| `npm run api:start` | Run the demo API once (`tsx`). |
+| `npm run api:typecheck` | Type-check the demo API (`server/`, Node target). |
+| `npm run api:test` | Run the demo API test suites (Vitest, boots the service). |
 
 ## Releases
 
@@ -50,6 +54,16 @@ The dashboard **publishes nothing to npm** (FR-17). It releases as two artifacts
 
 - a **deployable app image** (`Dockerfile` — the static bundle behind nginx), and
 - a **static bundle** (`dist/`) for any static host.
+
+## Demo API (reference adapters)
+
+`server/` holds the **demo API service** — the backend the dashboard's reference persistence adapter talks to (FR-5, FR-6; [`docs/SPEC.md`](docs/SPEC.md) §6). It is a small `node:http` service (no web framework) that provides:
+
+- a **layout KV store** keyed `(scope|user, pageType, entityId?) → LayoutDoc`, in-memory with optional file backing;
+- **config loading** from [`server/config/demo-config.json`](server/config/demo-config.json) — the single-tenant `users` and config-file `gates` (enablement flags); a malformed config fails loudly at startup;
+- a **stub login** (config-file users, no real authn/SSO — GW-D21) that gates every route under `/api/layouts` and `/api/auth/me`.
+
+Run it with `npm run api:dev`. Override the config path with `GRIDMASON_DEMO_CONFIG`, the persistence file with `GRIDMASON_LAYOUT_STORE`, and the port with `PORT`. The React app's adapters that consume this API are wired in D-E1; here the backend contracts are proven in isolation by the `server/api/*.test.ts` suites. The reference host-SDK enforcement (remote-identity + `min(user, widget-capability)`) and the gate revocation-feed merge are Phase B.
 
 ## Theming
 

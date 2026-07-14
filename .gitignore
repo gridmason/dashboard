@@ -5,6 +5,9 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# demo API local persistence (file-backed layout store)
+server/.data/
+
 # test / tooling output
 playwright-report/
 test-results/
