@@ -18,7 +18,8 @@ import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot
 import type { LocalImportMap, LocalRemote } from '../boot/import-map';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
-import { acknowledgedSideloadHost, sideloadHost } from '../sideload/host-seam';
+import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
+import { remountInstancesByTag } from '../sideload/remount';
 import { ACKNOWLEDGED_BADGE_LABEL, isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
 // Acknowledged-sideload badge styling — prod-safe (acknowledged mode ships in
 // production builds), so it is a real side-effect CSS import here, unlike the
@@ -272,6 +273,21 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       registry.reset();
     };
   }, [canvasRef, effective, page.pageType, page.entityId]);
+
+  // Dev hot-reload (SPEC §4, FR-7, issue #41): when an admitted `gridmason dev`
+  // origin re-serves its widget, the dev provider re-imports the entry and
+  // publishes a reload signal here; remount that origin's live instances so the
+  // re-served change lands without a manual reload (`../sideload/remount` documents
+  // why a scoped remount — not a class swap — is the mechanism). Dev-only: in a
+  // production build `import.meta.env.DEV` is a static `false`, so the seam is never
+  // subscribed to and this is dead code (nothing ever publishes to the bus).
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    return subscribeDevReload((signal) => {
+      const el = canvasRef.current;
+      if (el !== null) remountInstancesByTag(el, signal.tag);
+    });
+  }, [canvasRef]);
 
   return (
     <gm-page-canvas
