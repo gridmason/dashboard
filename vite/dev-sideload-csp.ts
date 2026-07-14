@@ -35,7 +35,13 @@ export const DEV_SIDELOAD_ENV = 'GRIDMASON_DEV_SIDELOAD';
  */
 export const DEV_SIDELOAD_ORIGINS = ['http://localhost:*', 'http://127.0.0.1:*'];
 
-function gateEnabled(): boolean {
+/**
+ * Whether the owner opted the dev server into sideload by setting
+ * {@link DEV_SIDELOAD_ENV}. Both dev-only channels gate on the same signal — the
+ * CSP relaxation here and the import-map injection (`dev-sideload-import-scope.ts`)
+ * — so a plain `npm run dev` gets neither and the dev experience is untouched.
+ */
+export function isDevSideloadGateEnabled(): boolean {
   const value = process.env[DEV_SIDELOAD_ENV];
   return value === '1' || value === 'true';
 }
@@ -46,7 +52,7 @@ export function devSideloadCsp(): Plugin {
     name: 'gridmason:dev-sideload-csp',
     apply: 'serve',
     configureServer(server) {
-      if (!gateEnabled()) return; // gate off → no CSP header → dev experience untouched
+      if (!isDevSideloadGateEnabled()) return; // gate off → no CSP header → dev experience untouched
       const header = buildDevCspHeader({
         dev: true,
         devSideloadEnabled: true,
