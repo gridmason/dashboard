@@ -1,0 +1,39 @@
+{
+  "name": "@gridmason/dashboard",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Gridmason Dashboard — permanent, product-neutral app over @gridmason/core + a Gridmason Registry. OSS showcase + widget-author dev target.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "engines": {
+    "node": ">=22.12.0"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "typecheck": "tsc --noEmit",
+    "preview": "vite preview --port 4173",
+    "test": "vitest run",
+    "e2e": "playwright test",
+    "e2e:install": "playwright install --with-deps chromium",
+    "lighthouse": "lhci autorun"
+  },
+  "dependencies": {
+    "@gridmason/core": "0.1.0",
+    "@gridmason/protocol": "0.0.2",
+    "@gridmason/sdk": "0.0.1",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
+    "wouter": "3.10.0"
+  },
+  "devDependencies": {
+    "@lhci/cli": "0.15.1",
+    "@playwright/test": "1.61.1",
+    "@types/react": "19.2.17",
+    "@types/react-dom": "19.2.3",
+    "@vitejs/plugin-react": "6.0.3",
+    "typescript": "7.0.2",
+    "vite": "8.1.4",
+    "vitest": "4.1.10"
+  }
+}
