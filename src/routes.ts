@@ -26,6 +26,8 @@ export const ROUTES = {
   home: '/',
   page: '/p/:pageType',
   pageEntity: '/p/:pageType/:entityId',
+  /** The governance demo (FR-4): a single governed page with the 3-level resolution view. */
+  governance: '/governance',
 } as const;
 
 /** Build the path for a page ref (used by links/navigation). */

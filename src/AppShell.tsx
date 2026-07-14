@@ -1,7 +1,20 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PageRef } from './routes';
+import { resolvePageType } from './pages/page-types';
+import { useEditSession } from './edit/edit-session';
 import './AppShell.css';
+
+/**
+ * A short label for the typed context a page provides (SPEC §5), read from its
+ * page-type descriptor: the declared context-slot types, or `none` for a page
+ * that provides no context. Reflects what the canvas actually hands widgets,
+ * rather than inferring context from the presence of an entity id.
+ */
+function contextLabel(pageType: string): string {
+  const types = Object.values(resolvePageType(pageType).descriptor.context).map((t) => t.type);
+  return types.length > 0 ? [...new Set(types)].join(', ') : 'none';
+}
 
 const BrandMark = (): React.JSX.Element => (
   <svg viewBox="0 0 128 128" width="26" height="26" aria-hidden="true">
@@ -36,6 +49,7 @@ export function AppShell({
   children: ReactNode;
 }): React.JSX.Element {
   const [, setTheme] = useState<'light' | 'dark' | null>(null);
+  const { ready, canEdit, editing, dirty, enter, save, discard, resetToDefault } = useEditSession();
 
   return (
     <div className="gm-shell">
@@ -44,14 +58,43 @@ export function AppShell({
           <BrandMark />
           grid<span>mason</span>
         </div>
+        {editing ? <span className="gm-editflag">● Editing layout</span> : null}
         <span className="gm-crumb">
           page&nbsp;·&nbsp;<b>{page.pageType}</b>
           {page.entityId !== undefined ? <> · {page.entityId}</> : null}
         </span>
-        <span className="gm-pill">
-          context: {page.entityId !== undefined ? 'record-ref' : 'none'}
-        </span>
+        <span className="gm-pill">context: {contextLabel(page.pageType)}</span>
         <div className="gm-spacer" />
+        {/* Edit toolbar (mockup 02-edit-mode.html). Save/Discard commit or drop the
+            staged edit; Reset deletes the user override so the page falls back to
+            the org/default layout. Hidden entirely on a page that forbids customization. */}
+        {editing ? (
+          <>
+            <button
+              type="button"
+              className="gm-btn"
+              onClick={() => void discard()}
+              disabled={!dirty}
+            >
+              Discard
+            </button>
+            <button type="button" className="gm-btn" onClick={() => void resetToDefault()}>
+              Reset to org default
+            </button>
+            <button
+              type="button"
+              className="gm-btn gm-btn-primary"
+              onClick={() => void save()}
+              disabled={!dirty}
+            >
+              Save layout
+            </button>
+          </>
+        ) : ready && canEdit ? (
+          <button type="button" className="gm-btn" onClick={enter}>
+            Edit layout
+          </button>
+        ) : null}
         <button
           type="button"
           className="gm-themebtn"

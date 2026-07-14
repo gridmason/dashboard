@@ -25,10 +25,27 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'] },
     },
   ],
-  webServer: {
-    command: 'npm run preview',
-    url: `http://localhost:${PORT}`,
-    reuseExistingServer: !process.env.CI,
-    timeout: 60_000,
-  },
+  // Two servers: the demo API (persistence backend) and the static preview that
+  // proxies `/api` to it (vite.config.ts). The API starts from an empty,
+  // gitignored layout store each run so the persistence/reset specs are
+  // deterministic — a stale user override must never leak between runs.
+  webServer: [
+    {
+      command: 'rm -rf e2e/.data && npm run api:start',
+      env: {
+        GRIDMASON_LAYOUT_STORE: 'e2e/.data/layouts.json',
+        GRIDMASON_GOVERNANCE_STORE: 'e2e/.data/governance.json',
+        PORT: '8787',
+      },
+      url: 'http://localhost:8787/api/health',
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+    {
+      command: 'npm run preview',
+      url: `http://localhost:${PORT}`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 60_000,
+    },
+  ],
 });
