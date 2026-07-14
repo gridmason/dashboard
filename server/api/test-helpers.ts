@@ -8,6 +8,7 @@ import { createApp } from '../app';
 import { AuthService } from '../auth/index';
 import type { DemoConfig } from '../config/index';
 import { LayoutStore, type LayoutDoc } from '../layout-store/index';
+import { GovernanceStore } from '../governance-store/index';
 
 /** A two-user config matching the checked-in sample's shape. */
 export function makeConfig(): DemoConfig {
@@ -16,7 +17,7 @@ export function makeConfig(): DemoConfig {
       { id: 'alice', username: 'alice', password: 'alice-dev-password', displayName: 'Alice Admin', roles: ['admin'] },
       { id: 'bob', username: 'bob', password: 'bob-dev-password', displayName: 'Bob Member', roles: ['member'] },
     ],
-    gates: { 'widgets.chart': true, 'widgets.crasher': false },
+    gates: { 'widgets.chart': true, 'widgets.crasher': false, 'governance.publish': true },
   };
 }
 
@@ -41,22 +42,26 @@ export function makeLayoutDoc(overrides: Partial<LayoutDoc> = {}): LayoutDoc {
 export interface TestServer {
   readonly baseUrl: string;
   readonly store: LayoutStore;
+  readonly governance: GovernanceStore;
   close(): Promise<void>;
 }
 
 /**
- * Boot the demo API on an ephemeral port with an in-memory store. Returns the
- * base URL, the store (for direct assertions), and a `close` teardown.
+ * Boot the demo API on an ephemeral port with in-memory stores. Returns the base
+ * URL, the layout + governance stores (for direct assertions), and a `close`
+ * teardown.
  */
 export async function startTestServer(config: DemoConfig = makeConfig()): Promise<TestServer> {
   const store = new LayoutStore();
+  const governance = new GovernanceStore();
   const auth = new AuthService(config);
-  const server = createApp({ config, store, auth });
+  const server = createApp({ config, store, governance, auth });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     store,
+    governance,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
 }

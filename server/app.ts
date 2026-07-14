@@ -12,6 +12,14 @@
  *   GET    /api/layouts/:scope/:pageType[/:entityId]    (auth)   read LayoutDoc
  *   PUT    /api/layouts/:scope/:pageType[/:entityId]    (auth)   write LayoutDoc
  *   DELETE /api/layouts/:scope/:pageType[/:entityId]    (auth)   delete LayoutDoc
+ *   GET    /api/governance/:scope/:pageType[/:entityId] (auth)   read OrgPublication
+ *   PUT    /api/governance/:scope/:pageType[/:entityId] (admin)  publish org layout+locks
+ *   DELETE /api/governance/:scope/:pageType[/:entityId] (admin)  unpublish
+ *
+ * Publishing (and un-publishing) an org layout is the one privileged action — it
+ * is gated on the caller holding the publisher role **and** the `governance.publish`
+ * config gate being on (SPEC §5/§6, the simple role stub). Everything else is
+ * gated only on a valid stub-login session.
  *
  * `createApp` returns an unlistened server so callers (and tests) own the port.
  */
@@ -19,6 +27,11 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { AuthService, SessionUser } from './auth/index';
 import type { DemoConfig } from './config/index';
 import { isLayoutDoc, type LayoutKey, type LayoutStore } from './layout-store/index';
+import {
+  isOrgPublication,
+  type GovernanceKey,
+  type GovernanceStore,
+} from './governance-store/index';
 import {
   BadRequestError,
   clearSessionCookie,
@@ -30,10 +43,17 @@ import {
   SESSION_COOKIE,
 } from './http-util';
 
+/** The role a user must hold to publish an org layout (SPEC §6 role stub). */
+const PUBLISHER_ROLE = 'admin';
+
+/** The config gate that must be on for org publishing to be permitted at all. */
+const PUBLISH_GATE = 'governance.publish';
+
 /** The collaborators the demo API is built over. */
 export interface AppDeps {
   readonly config: DemoConfig;
   readonly store: LayoutStore;
+  readonly governance: GovernanceStore;
   readonly auth: AuthService;
 }
 
@@ -69,6 +89,11 @@ async function handle(deps: AppDeps, req: IncomingMessage, res: ServerResponse):
 
   if (segments[1] === 'layouts') {
     await handleLayouts(deps, req, res, method, segments.slice(2));
+    return;
+  }
+
+  if (segments[1] === 'governance') {
+    await handleGovernance(deps, req, res, method, segments.slice(2));
     return;
   }
 
@@ -177,8 +202,78 @@ async function handleLayouts(
   sendJson(res, 405, { error: 'method_not_allowed' });
 }
 
-/** Build a {@link LayoutKey} from the `[scope, pageType, entityId?]` path tail. */
-function keyFromSegments(rest: readonly string[]): LayoutKey | undefined {
+async function handleGovernance(
+  deps: AppDeps,
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  rest: readonly string[],
+): Promise<void> {
+  const user = requireAuth(deps, req, res);
+  if (user === undefined) return;
+
+  const key = keyFromSegments(rest);
+  if (key === undefined) {
+    sendJson(res, 404, { error: 'not_found' });
+    return;
+  }
+
+  // Reading a publication only needs a session — a user must see the org layout
+  // and locks that govern their page.
+  if (method === 'GET') {
+    const publication = deps.governance.get(key);
+    if (publication === undefined) {
+      sendJson(res, 404, { error: 'publication_not_found' });
+      return;
+    }
+    sendJson(res, 200, publication);
+    return;
+  }
+
+  // Publishing and un-publishing are privileged: the caller must be a publisher
+  // and the config gate must be on (SPEC §5 — the operator, not an end user).
+  if (method === 'PUT' || method === 'DELETE') {
+    if (!canPublish(deps.config, user)) {
+      sendJson(res, 403, { error: 'forbidden' });
+      return;
+    }
+
+    if (method === 'DELETE') {
+      const existed = deps.governance.delete(key);
+      sendEmpty(res, existed ? 204 : 404);
+      return;
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof BadRequestError ? err.message : 'bad_request' });
+      return;
+    }
+    if (!isOrgPublication(body) || !isLayoutDoc(body.layout)) {
+      sendJson(res, 400, { error: 'body is not a valid org publication' });
+      return;
+    }
+    deps.governance.put(key, { layout: body.layout, locks: body.locks });
+    sendJson(res, 200, deps.governance.get(key));
+    return;
+  }
+
+  sendJson(res, 405, { error: 'method_not_allowed' });
+}
+
+/**
+ * Whether `user` may publish an org layout: they hold the publisher role and the
+ * `governance.publish` config gate is on. The simple role stub (SPEC §6) — real
+ * per-node/per-role authorization is a host concern pre-1.0 (GW-D21).
+ */
+function canPublish(config: DemoConfig, user: SessionUser): boolean {
+  return config.gates[PUBLISH_GATE] === true && user.roles.includes(PUBLISHER_ROLE);
+}
+
+/** Build a {@link GovernanceKey} / {@link LayoutKey} from the `[scope, pageType, entityId?]` path tail. */
+function keyFromSegments(rest: readonly string[]): (LayoutKey & GovernanceKey) | undefined {
   if (rest.length === 2) {
     return { scope: rest[0]!, pageType: rest[1]! };
   }

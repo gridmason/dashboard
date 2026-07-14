@@ -176,6 +176,9 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
       }),
       widget(WIDGET_TAGS.chart, {
         i: 'metrics',
+        // Slotted so an org publish can lock it (locks bind to slot ids, SPEC §5);
+        // it is unlocked by default — the governance demo's org level pins it.
+        slot: 'metrics',
         x: 0,
         y: 2,
         w: 6,
@@ -194,6 +197,7 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
       }),
       widget(WIDGET_TAGS.markdown, {
         i: 'notes',
+        slot: 'notes',
         x: 6,
         y: 2,
         w: 6,
