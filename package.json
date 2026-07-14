@@ -24,8 +24,8 @@
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
-    "@gridmason/core": "0.3.0",
-    "@gridmason/protocol": "0.0.3",
+    "@gridmason/core": "0.5.1",
+    "@gridmason/protocol": "0.0.4",
     "@gridmason/sdk": "0.2.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -44,6 +44,6 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "@gridmason/protocol": "0.0.3"
+    "@gridmason/protocol": "0.0.4"
   }
 }

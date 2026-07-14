@@ -16,11 +16,11 @@
  *   GET  /__clients      → { count } connected SSE clients (test-sync helper)
  *
  * Unlike a real scaffolded widget (whose entry imports `@gridmason/sdk` by bare
- * specifier and so needs an import map the dashboard does not yet provide — see
- * docs/sideload.md and the #38 verdict), this stand-in widget is **self-contained**:
- * it fetches `/content` on mount rather than importing anything, so it loads with
- * no shared scope and the hermetic e2e stays a pure test of the transport +
- * governance path. The author loop (re-serve → the running dashboard reflects the
+ * specifier — resolved by the dashboard's dev-sideload import scope, issue #40,
+ * exercised separately by `dev-widget-server-sdk.mjs`), this stand-in widget is
+ * **self-contained**: it fetches `/content` on mount rather than importing
+ * anything, so it needs no shared scope and this hot-reload e2e stays a pure test
+ * of the transport + governance path. The author loop (re-serve → the running dashboard reflects the
  * change **without a manual reload**, issue #41) is what the SSE stream drives: a
  * `reload` frame makes the dashboard remount the mounted instance, and the fresh
  * mount re-fetches `/content` — because a custom element cannot be re-`define`d, a
