@@ -9,42 +9,53 @@
  *
  * This is the **Phase-A** assembly: **local remotes only**. Every entry points
  * at a module bundled with the shell (a `local` source, `@gridmason/protocol`
- * identity.ts), assembled from the demo page types' default layouts. Phase B
- * (D-E3) merges the enabled registries' resolved remotes into the same map —
- * their entries carry verified CDN URLs and ride the Service-Worker fetch path —
- * and injects the merged map as a real `<script type="importmap">`. Keeping the
- * shell's view of "how a tag becomes a module" behind this one module is what
- * lets that later change be additive: the boot glue calls {@link loadWidgetTag}
- * and never learns whether a remote was local or federated.
+ * identity.ts) — the five first-party demo widgets (clock, markdown,
+ * record-summary, chart, crasher) that exercise the whole widget ABI (SPEC §5).
+ * Phase B (D-E3) merges the enabled registries' resolved remotes into the same
+ * map — their entries carry verified CDN URLs and ride the Service-Worker fetch
+ * path — and injects the merged map as a real `<script type="importmap">`.
+ * Keeping the shell's view of "how a tag becomes a module" behind this one module
+ * is what lets that later change be additive: the boot glue calls
+ * {@link loadWidgetTag} and never learns whether a remote was local or federated.
  */
 
-import type { LayoutPage } from '@gridmason/protocol';
+import { LOCAL_SOURCE } from '@gridmason/protocol';
+import type { LayoutPage, WidgetID } from '@gridmason/protocol';
+
+export { LOCAL_SOURCE };
 
 /**
- * The custom-element tag of the Phase-A placeholder widget every demo layout
- * references. It is scaffolding: the first-party demo widgets (clock, markdown,
- * record-summary, chart, crasher) land in #6 and replace these entries with
- * their own tags and modules. Kept here (DOM-free) so the page-type config and
- * the widget module agree on one spelling.
+ * The custom-element tags of the five first-party demo widgets (SPEC §5). Declared
+ * here — DOM-free — so the page-type config, this map, and each widget module
+ * agree on one spelling **without** this module statically importing widget code:
+ * a widget imports its own tag from here, and the map reaches the widget only
+ * through a lazy `import()` thunk (below). That keeps import-map DOM-free and lets
+ * each widget code-split into its own chunk (SPEC §2 "lazy activation").
  */
-export const PLACEHOLDER_WIDGET_TAG = 'gm-placeholder-widget';
-
-/** The literal `source` of a host-bundled (local) remote — mirrors protocol identity.ts. */
-export const LOCAL_SOURCE = 'local';
+export const WIDGET_TAGS = {
+  clock: 'gm-clock-widget',
+  markdown: 'gm-markdown-widget',
+  recordSummary: 'gm-record-summary-widget',
+  chart: 'gm-chart-widget',
+  crasher: 'gm-crasher-widget',
+} as const;
 
 /**
  * One local remote in the import map: the widget `tag` it registers, its
- * `source`-qualified identity, the bare `specifier` the declarative import map
- * maps, and the native dynamic `import()` that loads (and, as a side effect,
- * registers) its custom element. `load` is a thunk rather than an eager import
- * so a tag's module is fetched only on activation (SPEC §2 "lazy") — and so this
- * module stays DOM-free until a remote is actually loaded.
+ * `source`-qualified identity, a human `name` (for the error-boundary fallback
+ * card), the bare `specifier` the declarative import map maps, and the native
+ * dynamic `import()` that loads (and, as a side effect, registers) its custom
+ * element. `load` is a thunk rather than an eager import so a tag's module is
+ * fetched only on activation (SPEC §2 "lazy") — and so this module stays DOM-free
+ * until a remote is actually loaded.
  */
 export interface LocalRemote {
   /** The custom-element tag this remote registers. */
   readonly tag: string;
   /** Source-qualified identity — always `local` in Phase A. */
   readonly source: string;
+  /** Human display name, shown on the boundary fallback card (SPEC §6/§8). */
+  readonly name: string;
   /** The bare specifier the declarative import map binds to a module URL. */
   readonly specifier: string;
   /** Lazily import the entry module, registering the element as a side effect. */
@@ -65,18 +76,41 @@ export interface ImportMapJson {
   readonly imports: Readonly<Record<string, string>>;
 }
 
+/** Build a local remote for `tag`, deriving its `local`-qualified specifier. */
+function localRemote(tag: string, name: string, load: () => Promise<unknown>): LocalRemote {
+  return { tag, source: LOCAL_SOURCE, name, specifier: `${LOCAL_SOURCE}/${tag}`, load };
+}
+
 /**
- * The single Phase-A local remote: the placeholder widget. Its `load` thunk is
- * where — and the only place — a DOM-touching module is imported, so importing
- * *this* module (e.g. from the page-type config, under Node in unit tests) never
- * evaluates widget code.
+ * The Phase-A local remotes: the five first-party demo widgets. Each `load` thunk
+ * is where — and the only place — a DOM-touching widget module is imported, so
+ * importing *this* module (e.g. from the page-type config, under Node in unit
+ * tests) never evaluates widget code.
  */
-const PLACEHOLDER_REMOTE: LocalRemote = {
-  tag: PLACEHOLDER_WIDGET_TAG,
-  source: LOCAL_SOURCE,
-  specifier: `${LOCAL_SOURCE}/${PLACEHOLDER_WIDGET_TAG}`,
-  load: () => import('../widgets/placeholder'),
-};
+const LOCAL_REMOTES: readonly LocalRemote[] = [
+  localRemote(WIDGET_TAGS.clock, 'Clock', () => import('../widgets/clock/clock')),
+  localRemote(WIDGET_TAGS.markdown, 'Notes', () => import('../widgets/markdown/markdown')),
+  localRemote(WIDGET_TAGS.recordSummary, 'Record summary', () => import('../widgets/record-summary/record-summary')),
+  localRemote(WIDGET_TAGS.chart, 'Chart', () => import('../widgets/chart/chart')),
+  localRemote(WIDGET_TAGS.crasher, 'Crasher', () => import('../widgets/crasher/crasher')),
+];
+
+/** Widget tag → display name, for the boundary descriptor (built once from the remotes). */
+const WIDGET_NAMES: ReadonlyMap<string, string> = new Map(
+  LOCAL_REMOTES.map((remote) => [remote.tag, remote.name]),
+);
+
+/**
+ * Resolve a display **name** for a widget instance's fallback card (SPEC §6/§8) —
+ * the shape core's `PageCanvas.widgetDescriptor` expects. A first-party (`local`)
+ * tag resolves to its friendly name; any other identity returns `undefined`, so
+ * an unknown/unentitled widget stays an anonymous card (no tag/name echo). Wired
+ * onto the canvas in `CanvasHost`.
+ */
+export function describeWidget(identity: { readonly widgetID: WidgetID }): string | undefined {
+  if (identity.widgetID.source !== LOCAL_SOURCE) return undefined;
+  return WIDGET_NAMES.get(identity.widgetID.tag);
+}
 
 /**
  * Assemble the Phase-A local import map. Local remotes only — no registry, no
@@ -84,8 +118,7 @@ const PLACEHOLDER_REMOTE: LocalRemote = {
  * caller can extend it without mutating shared state.
  */
 export function assembleImportMap(): LocalImportMap {
-  const remotes: readonly LocalRemote[] = [PLACEHOLDER_REMOTE];
-  return new Map(remotes.map((remote) => [remote.tag, remote]));
+  return new Map(LOCAL_REMOTES.map((remote) => [remote.tag, remote]));
 }
 
 /**

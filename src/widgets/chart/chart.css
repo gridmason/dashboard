@@ -1,0 +1,67 @@
+/*
+ * Chart widget styling — theme tokens only (../../theme/tokens.css). The SVG
+ * marks reference the palette custom properties directly, so the chart re-themes
+ * (light/dark) with no JS.
+ */
+
+gm-chart-widget {
+  display: block;
+  block-size: 100%;
+}
+
+.gm-chart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  block-size: 100%;
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid var(--gm-line);
+  border-radius: var(--gm-radius);
+  background: var(--gm-card);
+  color: var(--gm-ink);
+}
+
+.gm-chart__caption {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gm-ink);
+}
+
+.gm-chart__svg {
+  flex: 1;
+  inline-size: 100%;
+  min-block-size: 0;
+}
+
+.gm-chart__bar {
+  fill: var(--gm-copper);
+}
+
+.gm-chart__line {
+  stroke: var(--gm-copper);
+  stroke-width: 2;
+  vector-effect: non-scaling-stroke;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+.gm-chart__invalid {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--gm-warn);
+}
+
+.gm-chart__invalid-title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.gm-chart__invalid-list {
+  margin: 0;
+  padding-inline-start: 1.1em;
+  font-family: var(--gm-font-mono);
+  font-size: 11px;
+  color: var(--gm-ink-soft);
+}

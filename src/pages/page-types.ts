@@ -16,8 +16,11 @@
  * it into an `EffectiveLayout` via `resolveLayout`, passing the descriptor's
  * `locks` as the default level's locks.
  *
- * Every layout references the Phase-A placeholder widget (`../boot/import-map`);
- * #6 swaps in the first-party demo widgets and the layouts that showcase them.
+ * Every layout places the first-party demo widgets (`../boot/import-map`
+ * `WIDGET_TAGS`) so the four page types together showcase the whole widget ABI
+ * (SPEC §5): static clock/markdown, the context-consuming record-summary, the
+ * schema-validated chart, and the deliberate crasher that proves the per-widget
+ * error boundary.
  */
 
 import {
@@ -27,7 +30,7 @@ import {
 } from '@gridmason/core/engine';
 import type { LayoutPage, LayoutWidget } from '@gridmason/protocol';
 import { DEFAULT_PAGE_TYPE } from '../routes';
-import { LOCAL_SOURCE, PLACEHOLDER_WIDGET_TAG } from '../boot/import-map';
+import { LOCAL_SOURCE, WIDGET_TAGS } from '../boot/import-map';
 
 /** A demo page type: its registered descriptor plus the default layout it ships. */
 export interface DemoPageType {
@@ -37,15 +40,21 @@ export interface DemoPageType {
   readonly defaultLayout: LayoutPage;
 }
 
-/** A placed placeholder widget — every demo item is one, distinguished by its `label` prop. */
-function placeholder(
-  item: Omit<LayoutWidget, 'widgetID'> & { readonly label: string },
-): LayoutWidget {
-  const { label, props, slot, ...geometry } = item;
+/** A placed widget item, before its `local` source-qualified identity is attached. */
+type PlacedWidget = Omit<LayoutWidget, 'widgetID'>;
+
+/**
+ * Place one first-party demo widget (`tag`) into a grid: attach its `local`
+ * source-qualified identity to the geometry/props/slot. The five demo widget tags
+ * come from the import map (`WIDGET_TAGS`), so a placement and its registered
+ * remote can never drift.
+ */
+function widget(tag: string, item: PlacedWidget): LayoutWidget {
+  const { props, slot, ...geometry } = item;
   return {
-    widgetID: { source: LOCAL_SOURCE, tag: PLACEHOLDER_WIDGET_TAG },
+    widgetID: { source: LOCAL_SOURCE, tag },
     ...geometry,
-    props: { label, ...props },
+    ...(props !== undefined ? { props } : {}),
     ...(slot !== undefined ? { slot } : {}),
   };
 }
@@ -95,11 +104,57 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
     context: {},
     allow_user_customization: true,
     layoutName: 'Home dashboard',
+    // Static clock + markdown, a schema-validated chart, and the crasher — so the
+    // home page exercises the static-props ABI and (via the crasher) proves the
+    // per-widget error boundary isolates one failure while siblings render.
     items: [
-      placeholder({ i: 'clock', x: 0, y: 0, w: 3, h: 2, label: 'Clock' }),
-      placeholder({ i: 'notes', x: 3, y: 0, w: 5, h: 2, label: 'Notes' }),
-      placeholder({ i: 'chart', x: 8, y: 0, w: 4, h: 3, label: 'Chart' }),
-      placeholder({ i: 'activity', x: 0, y: 2, w: 8, h: 3, label: 'Activity feed' }),
+      widget(WIDGET_TAGS.clock, {
+        i: 'clock',
+        x: 0,
+        y: 0,
+        w: 3,
+        h: 2,
+        props: { label: 'Local time', format: '24h', showSeconds: true },
+      }),
+      widget(WIDGET_TAGS.markdown, {
+        i: 'notes',
+        x: 3,
+        y: 0,
+        w: 5,
+        h: 2,
+        props: {
+          label: 'Notes',
+          markdown:
+            '# Welcome to Gridmason\n\nThis dashboard is built from **first-party demo widgets** — each one a framework-agnostic custom element.\n\n- Drag widgets in *edit mode*\n- Widgets theme via CSS custom properties\n- See the [docs](https://gridmason.dev)',
+        },
+      }),
+      widget(WIDGET_TAGS.chart, {
+        i: 'chart',
+        x: 8,
+        y: 0,
+        w: 4,
+        h: 3,
+        props: {
+          label: 'Sales',
+          title: 'Sales this month',
+          kind: 'bar',
+          unit: 'k USD',
+          series: [
+            { label: 'Mar', value: 182 },
+            { label: 'Apr', value: 156 },
+            { label: 'May', value: 221 },
+            { label: 'Jun', value: 248 },
+          ],
+        },
+      }),
+      widget(WIDGET_TAGS.crasher, {
+        i: 'crasher',
+        x: 0,
+        y: 2,
+        w: 8,
+        h: 3,
+        props: { label: 'Broken widget', message: 'Deliberate demo crash on mount' },
+      }),
     ],
   },
   {
@@ -108,10 +163,47 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
     locks: ['header'],
     allow_user_customization: true,
     layoutName: 'Record detail',
+    // The record-summary consumes the page's typed `record-ref` context in the
+    // locked header; a chart and notes fill the customizable body.
     items: [
-      placeholder({ i: 'header', slot: 'header', x: 0, y: 0, w: 12, h: 2, label: 'Customer header' }),
-      placeholder({ i: 'summary', x: 0, y: 2, w: 6, h: 3, label: 'Record summary' }),
-      placeholder({ i: 'metrics', x: 6, y: 2, w: 6, h: 3, label: 'Metrics' }),
+      widget(WIDGET_TAGS.recordSummary, {
+        i: 'header',
+        slot: 'header',
+        x: 0,
+        y: 0,
+        w: 12,
+        h: 2,
+      }),
+      widget(WIDGET_TAGS.chart, {
+        i: 'metrics',
+        x: 0,
+        y: 2,
+        w: 6,
+        h: 3,
+        props: {
+          title: 'Monthly spend',
+          kind: 'line',
+          unit: 'k USD',
+          series: [
+            { label: 'Q1', value: 42 },
+            { label: 'Q2', value: 51 },
+            { label: 'Q3', value: 47 },
+            { label: 'Q4', value: 63 },
+          ],
+        },
+      }),
+      widget(WIDGET_TAGS.markdown, {
+        i: 'notes',
+        x: 6,
+        y: 2,
+        w: 6,
+        h: 3,
+        props: {
+          label: 'Account notes',
+          markdown:
+            'Primary contact prefers email.\n\n- Renewal in **Q4**\n- Migrated to `stable-2026.07`',
+        },
+      }),
     ],
   },
   {
@@ -120,10 +212,48 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
     locks: ['summary', 'activity', 'notes'],
     allow_user_customization: false,
     layoutName: 'Locked page',
+    // A fully locked page: three widgets, no customization — nothing moves.
     items: [
-      placeholder({ i: 'summary', slot: 'summary', x: 0, y: 0, w: 6, h: 3, label: 'Overview' }),
-      placeholder({ i: 'activity', slot: 'activity', x: 6, y: 0, w: 6, h: 3, label: 'Activity' }),
-      placeholder({ i: 'notes', slot: 'notes', x: 0, y: 3, w: 12, h: 2, label: 'Notes' }),
+      widget(WIDGET_TAGS.markdown, {
+        i: 'summary',
+        slot: 'summary',
+        x: 0,
+        y: 0,
+        w: 6,
+        h: 3,
+        props: {
+          label: 'Overview',
+          markdown: '## Status board\n\nThis page is **fully locked** — users cannot rearrange it.',
+        },
+      }),
+      widget(WIDGET_TAGS.chart, {
+        i: 'activity',
+        slot: 'activity',
+        x: 6,
+        y: 0,
+        w: 6,
+        h: 3,
+        props: {
+          title: 'Throughput',
+          kind: 'bar',
+          series: [
+            { label: 'Mon', value: 12 },
+            { label: 'Tue', value: 19 },
+            { label: 'Wed', value: 8 },
+            { label: 'Thu', value: 15 },
+            { label: 'Fri', value: 22 },
+          ],
+        },
+      }),
+      widget(WIDGET_TAGS.clock, {
+        i: 'notes',
+        slot: 'notes',
+        x: 0,
+        y: 3,
+        w: 12,
+        h: 2,
+        props: { label: 'Server time', format: '24h', showSeconds: true, timeZone: 'UTC' },
+      }),
     ],
   },
   {
@@ -132,8 +262,28 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
     locks: ['main'],
     allow_user_customization: false,
     layoutName: 'Full canvas',
+    // One maximized, locked chart spanning the grid — an ordinary page type, not
+    // special-cased (the no-special-case proof).
     items: [
-      placeholder({ i: 'main', slot: 'main', x: 0, y: 0, w: 12, h: 8, label: 'Full-canvas widget' }),
+      widget(WIDGET_TAGS.chart, {
+        i: 'main',
+        slot: 'main',
+        x: 0,
+        y: 0,
+        w: 12,
+        h: 8,
+        props: {
+          title: 'Revenue by region',
+          kind: 'bar',
+          unit: 'k USD',
+          series: [
+            { label: 'NA', value: 412 },
+            { label: 'EMEA', value: 288 },
+            { label: 'APAC', value: 196 },
+            { label: 'LATAM', value: 74 },
+          ],
+        },
+      }),
     ],
   },
 ];

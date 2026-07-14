@@ -6,11 +6,14 @@ import { expect, test } from '@playwright/test';
  * demo page types renders its default layout through that one canvas, driven
  * from the local import map (SPEC §2, §5). The canvas is located by the
  * canonical accessible name from mockup 01-canvas.html; a rendered layout is
- * asserted by the gridstack items it places and the placeholder widget the
+ * asserted by the gridstack items it places and a first-party demo widget the
  * import map lazily loads into them.
  */
 
 const CANVAS = 'gm-page-canvas[aria-label="Page canvas — grid of widgets"]';
+
+/** A healthy first-party demo widget card (any of the non-crashing widgets). */
+const HEALTHY_WIDGET = '.gm-clock, .gm-markdown, .gm-chart, .gm-record-summary';
 
 interface PageTypeCase {
   readonly pageType: string;
@@ -39,9 +42,9 @@ for (const { pageType, path, widgets, entityId } of PAGE_TYPES) {
     }
 
     // The layout rendered: gridstack placed every item, and the import map
-    // lazily loaded the widget into each one.
+    // lazily loaded a first-party widget into them.
     await expect(canvas.locator('.grid-stack-item')).toHaveCount(widgets);
-    await expect(canvas.locator('.gm-placeholder').first()).toBeVisible();
+    await expect(canvas.locator(HEALTHY_WIDGET).first()).toBeVisible();
   });
 }
 
