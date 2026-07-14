@@ -74,6 +74,22 @@ jobs:
           path: playwright-report
           if-no-files-found: ignore
 
+  # Demo API service (FR-5, FR-6): type-check the server and run its suites. The
+  # api tests boot the service on an ephemeral port, so this job also proves the
+  # service starts in CI. Vitest-only — no browser needed.
+  api:
+    name: Demo API tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npm run api:typecheck
+      - run: npm run api:test
+
   # Lighthouse CI perf pass over the built bundle. Stub gate for D-E0 — present
   # and runs, non-blocking; the NFR budget is asserted in D-E4 (FR-16).
   lighthouse:
