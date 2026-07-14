@@ -68,3 +68,69 @@ the caveat above verbatim:
 
 Whichever mode you enable: no verify chain yet — run only widgets you built or
 reviewed yourself.
+
+## The `gridmason dev` serving contract (dev sideload)
+
+Dev sideload admits a remote served by `gridmason dev` (`@gridmason/cli`). The
+dashboard's seam (`src/sideload/manifest.ts`, `fetchDevManifest`) is reconciled
+against the **real** contract, verified against `@gridmason/cli@0.0.1` (issue #38,
+reported on gridmason/cli#28):
+
+| What | Endpoint | Shape |
+|---|---|---|
+| Live, re-validated manifest | `GET /@dev/manifest` | `{ valid, violations, tag, entry }` |
+| Raw manifest (display name) | `GET /manifest.json` | the widget's `manifest.json` (has `name`) |
+| Entry module | `GET /<entry>` (e.g. `/src/entry.js`) | the entry source, served **verbatim** |
+| Hot-reload signal | `GET /@dev/events` (SSE) | `event: reload` `{ category, generation }` |
+
+The dashboard reads `tag` + `entry` from `/@dev/manifest` (refusing a manifest the
+server flags `valid: false`), resolves the **project-relative** `entry` against the
+origin, and reads the display `name` best-effort from `/manifest.json` (falling back
+to the tag). `gridmason dev`'s dev-only routes are namespaced under `/@dev/` so they
+never collide with a widget source path served from the project tree.
+
+### What works today, and two known gaps
+
+Verified end to end in a real browser against real `gridmason dev`
+(`npm run e2e:real-cli`, below): register origin → hot-load → distinct badge →
+mount through the shared `PageCanvas` + SDK path → per-session (a reload clears it).
+
+Two gaps remain, both **follow-ups** (not fixed here):
+
+- **A scaffold-template widget does not load yet.** `gridmason dev` serves the
+  entry source verbatim, and the vanilla/React/Vue templates import `@gridmason/sdk`
+  (and their framework) by **bare specifier**. The dashboard `import()`s a sideload
+  entry directly and provides **no shared `@gridmason/*` import scope**, so a bare
+  import throws `Failed to resolve module specifier "@gridmason/sdk"`. The CLI's own
+  fixture harness injects an import map for these; the dashboard would need the
+  equivalent (a shared import-map scope for sideloaded modules) to host template
+  widgets. Until then, dev-sideload a **self-contained** widget (no bare imports).
+- **Source edits do not hot-reload.** The dashboard has no `/@dev/events` (SSE)
+  listener and imports the entry at a stable URL, so an edited module is neither
+  re-fetched nor re-imported (a custom element cannot be re-`define`d either). A
+  **data/fixture** change is reflected on a fresh mount if the widget re-fetches its
+  data on mount; a **code** change needs an SSE listener that re-imports at
+  `?v=<generation>` (effectively a page reload, as the CLI harness does).
+
+## Continuous verification
+
+CI stays **hermetic**: the default Playwright matrix (`npm run e2e`) drives a
+contract-faithful stand-in (`e2e/fixtures/dev-widget-server.mjs`) that mirrors the
+`gridmason dev` contract above — no network, no published-package download. The
+stand-in widget is deliberately self-contained so the e2e is a pure test of the
+transport + governance path.
+
+An **optional, non-hermetic** check runs the same author loop against the real
+published CLI:
+
+```
+npm run e2e:real-cli
+```
+
+It stands up the demo API, `vite dev` (dev gate on), and
+`npx @gridmason/cli@0.0.1 dev` serving `e2e/fixtures/real-cli-widget/`
+(`playwright.real-cli.config.ts`), then registers the real origin and asserts the
+widget mounts with its badge. It is excluded from the default matrix because it
+downloads and runs `@gridmason/cli` over the network; run it deliberately when
+validating against a new CLI release (override the version with
+`GM_E2E_CLI_VERSION`).

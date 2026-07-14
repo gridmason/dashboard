@@ -45,8 +45,9 @@ export default defineConfig({
     {
       name: 'chromium',
       // The production-parity project: everything except the dev-server-driven
-      // sideload specs (the dev author loop and the acknowledged register/place flow).
-      testIgnore: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts'],
+      // sideload specs (the dev author loop and the acknowledged register/place flow)
+      // and the optional real-CLI verification (playwright.real-cli.config.ts).
+      testIgnore: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts', '**/real-cli/**'],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
     },
     {
@@ -96,7 +97,8 @@ export default defineConfig({
     {
       command: 'node e2e/fixtures/dev-widget-server.mjs',
       env: { DEV_WIDGET_PORT: String(DEV_WIDGET_PORT) },
-      url: `http://localhost:${DEV_WIDGET_PORT}/gridmason.widget.json`,
+      // The stand-in mirrors real `gridmason dev`, whose live manifest is at /@dev/manifest.
+      url: `http://localhost:${DEV_WIDGET_PORT}/@dev/manifest`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },

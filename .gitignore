@@ -8,6 +8,7 @@ dist/
 # demo API local persistence (file-backed layout store)
 server/.data/
 e2e/.data/
+e2e/.data-real-cli/
 
 # test / tooling output
 playwright-report/
