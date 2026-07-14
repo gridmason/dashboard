@@ -13,9 +13,14 @@
  * Phase A has no record store, so this widget renders straight from the context
  * *reference* (`{ recordType, id }`). Resolving that id to a full record — name,
  * fields, status — is the host **SDK read path**, finalized in the interim-SDK-
- * handle sibling issue (#7). The seam is marked below: when the SDK handle lands
- * on `this.sdk`, `#render` gains a `sdk.getRecord(ref)` branch; until then it
- * consumes the context as-delivered. Nothing here touches `host-sdk/`.
+ * handle sibling issue (#7). Its contract (per #7): core 0.3.0 assigns the
+ * per-instance handle onto the element **after** mount (via the canvas
+ * `gm:rendered` / `gm:widget-mounted` events), so `element.sdk` is **not** present
+ * during `connectedCallback`. When the seam below is implemented it must therefore
+ * read `this.sdk` **lazily, at data-read time** (an async fetch kicked off from a
+ * post-mount hook or a `gm:rendered` listener) — never synchronously in
+ * `connectedCallback`, which would see `undefined`. Until then the widget consumes
+ * the context as-delivered. Nothing here touches `host-sdk/`.
  */
 
 import { WIDGET_TAGS } from '../../boot/import-map';
@@ -52,7 +57,8 @@ class RecordSummaryWidget extends HTMLElement {
     if (ref === undefined) {
       card.append(this.#emptyState('No record in context'));
     } else {
-      // SEAM (#7): with the SDK handle present this becomes
+      // SEAM (#7): once the SDK handle is available, a post-mount hook (the handle
+      // lands after connectedCallback, via gm:rendered) reads `this.sdk` lazily —
       // `this.sdk.getRecord(ref)` → render the resolved record's fields. Until
       // then, summarize the reference the page context provides.
       card.append(...this.#referenceView(ref));
