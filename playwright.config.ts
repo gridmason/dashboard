@@ -7,6 +7,9 @@ const PREVIEW_PORT = Number(process.env.GM_E2E_PREVIEW_PORT ?? '4173');
 const DEV_PORT = Number(process.env.GM_E2E_DEV_PORT ?? '5173');
 const DEV_WIDGET_PORT = Number(process.env.GM_E2E_WIDGET_PORT ?? '6070');
 const ACK_WIDGET_PORT = Number(process.env.GM_E2E_ACK_WIDGET_PORT ?? '6071');
+// The stand-in dev server whose widget imports `@gridmason/*` by bare specifier
+// (issue #40) — exercises the dev-sideload import scope.
+const SDK_WIDGET_PORT = Number(process.env.GM_E2E_SDK_WIDGET_PORT ?? '6072');
 const API_PORT = Number(process.env.GM_E2E_API_PORT ?? '8787');
 // The dev/preview servers proxy `/api` to this URL (vite.config.ts), so it must
 // track API_PORT when that is overridden.
@@ -47,13 +50,22 @@ export default defineConfig({
       // The production-parity project: everything except the dev-server-driven
       // sideload specs (the dev author loop and the acknowledged register/place flow)
       // and the optional real-CLI verification (playwright.real-cli.config.ts).
-      testIgnore: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts', '**/real-cli/**'],
+      testIgnore: [
+        '**/sideload-dev.spec.ts',
+        '**/sideload-dev-import-scope.spec.ts',
+        '**/sideload-acknowledged.spec.ts',
+        '**/real-cli/**',
+      ],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
     },
     {
       name: 'chromium-dev',
       // The dev-server-driven sideload specs, run against the dev server with the gate on.
-      testMatch: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts'],
+      testMatch: [
+        '**/sideload-dev.spec.ts',
+        '**/sideload-dev-import-scope.spec.ts',
+        '**/sideload-acknowledged.spec.ts',
+      ],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${DEV_PORT}` },
     },
   ],
@@ -106,6 +118,14 @@ export default defineConfig({
       command: 'node e2e/fixtures/acknowledged-widget-server.mjs',
       env: { ACK_WIDGET_PORT: String(ACK_WIDGET_PORT) },
       url: `http://localhost:${ACK_WIDGET_PORT}/gridmason.widget.json`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      // The bare-specifier stand-in for the import-scope spec (issue #40).
+      command: 'node e2e/fixtures/dev-widget-server-sdk.mjs',
+      env: { SDK_WIDGET_PORT: String(SDK_WIDGET_PORT) },
+      url: `http://localhost:${SDK_WIDGET_PORT}/@dev/manifest`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },

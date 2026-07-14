@@ -123,17 +123,37 @@ tag*, which the dashboard cannot impose because `gridmason dev` serves the entry
 source verbatim (its `define` call hardcodes the tag). For a code change, restart
 the mount via the picker or reload the page.
 
-### Known gap: scaffold-template widgets
+### Scaffold-template widgets: the shared `@gridmason/*` import scope
 
-**A scaffold-template widget does not load yet** (follow-up, tracked as #40, not
-fixed here). `gridmason dev` serves the entry source verbatim, and the
-vanilla/React/Vue templates import `@gridmason/sdk` (and their framework) by **bare
-specifier**. The dashboard `import()`s a sideload entry directly and provides **no
-shared `@gridmason/*` import scope**, so a bare import throws `Failed to resolve
-module specifier "@gridmason/sdk"`. The CLI's own fixture harness injects an import
-map for these; the dashboard would need the equivalent (a shared import-map scope
-for sideloaded modules) to host template widgets. Until then, dev-sideload a
-**self-contained** widget (no bare imports).
+`gridmason dev` serves a widget's entry source **verbatim**, and the scaffold
+templates import `@gridmason/sdk` (and, for author-facing types, `@gridmason/protocol`)
+by **bare specifier**. When the dashboard `import()`s that entry directly the
+browser has to resolve those specifiers, and with nothing to resolve them against a
+bare import throws `Failed to resolve module specifier "@gridmason/sdk"`.
+
+The **dev server** closes this by injecting a `@gridmason/*` import map (issue #40,
+`vite/dev-sideload-import-scope.ts`): while the dev gate is on
+(`GRIDMASON_DEV_SIDELOAD=1`) it prepends a `<script type="importmap">` that maps
+`@gridmason/sdk`, `@gridmason/sdk/vanilla`, and `@gridmason/protocol` to the
+dashboard's **own pinned copies** (the versions in the dashboard's `package.json`,
+served by Vite and deduped with the app's own SDK). A sideloaded widget's bare
+import therefore resolves to the dashboard's SDK instead of failing. The map is a
+top-level `imports` block injected once, up front — safe because in a dev build the
+app's own modules never carry a bare `@gridmason/*` specifier (Vite pre-resolves
+every one), so the map is consulted **only** by verbatim-served sideloaded modules
+and cannot change how the app loads its own SDK.
+
+This is a **dev-server-only** convenience: it rides the same
+`GRIDMASON_DEV_SIDELOAD` opt-in as the dev CSP relaxation, and a production
+`vite build` injects no map (dev sideload ships in development builds only).
+
+**Still out of scope: framework specifiers.** A React or Vue scaffold widget also
+imports its framework (`react` / `vue`) by bare specifier, and those are **not**
+mapped (issue #40 is `@gridmason/*` only; the dashboard does not even depend on
+`vue`). So a **vanilla** scaffold widget (SDK + protocol, no framework import) loads
+end to end today; a React/Vue one still needs its framework resolved, which is a
+later enhancement (or `gridmason dev` learning to rewrite bare specifiers itself —
+gridmason/cli#28).
 
 ## Continuous verification
 

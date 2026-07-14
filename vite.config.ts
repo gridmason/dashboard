@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
-import { devSideloadCsp } from './vite/dev-sideload-csp';
+import { devSideloadCsp, isDevSideloadGateEnabled } from './vite/dev-sideload-csp';
+import { SIDELOAD_IMPORT_MAP, devSideloadImportScope } from './vite/dev-sideload-import-scope';
 
 // The demo API (server/) the persistence adapter talks to. Dev and preview both
 // proxy `/api` to it so the SPA and the API are same-origin — the `HttpOnly`
@@ -22,14 +23,30 @@ const SIDELOAD_MODE = process.env.GRIDMASON_SIDELOAD_MODE ?? 'off';
 // deep links (/p/:pageType/:entityId) must load assets from an absolute path,
 // not one relative to the current route.
 export default defineConfig({
-  // `devSideloadCsp` is a serve-only plugin: it delivers the dev-sideload CSP
-  // relaxation for `vite dev` (and only when the owner opts in), and is inert for
-  // `vite build`, so the production bundle carries no CSP relaxation (SPEC §4).
-  plugins: [react(), devSideloadCsp()],
+  // `devSideloadCsp` and `devSideloadImportScope` are serve-only plugins gated on
+  // the same `GRIDMASON_DEV_SIDELOAD` opt-in: the first delivers the dev-sideload
+  // CSP relaxation, the second injects the `@gridmason/*` import map that lets a
+  // sideloaded scaffold-template widget resolve its bare specifiers (issue #40).
+  // Both are inert for `vite build`, so the production bundle carries neither the
+  // CSP relaxation nor the import map (SPEC §4).
+  plugins: [react(), devSideloadCsp(), devSideloadImportScope()],
   define: {
     __GM_SIDELOAD_MODE__: JSON.stringify(SIDELOAD_MODE),
   },
   base: '/',
+  // When the dev-sideload gate is on, force-bundle the `@gridmason/*` modules the
+  // import scope maps (`dev-sideload-import-scope.ts`). A sideloaded widget imports
+  // these only at runtime, and the app itself imports `@gridmason/sdk` (root) only
+  // as a *type* — so without this Vite first discovers the dep when the widget
+  // loads, re-optimizes, and issues a **full-page reload**, which would wipe the
+  // per-session sideload widget mid-flight (and, being global, disrupt other dev
+  // pages too). Pre-bundling them at server start keeps that first import reload-
+  // free. Dev-only: `optimizeDeps` does not affect `vite build`. Spread so the key
+  // is simply absent when the gate is off (not set to `undefined`, which
+  // `exactOptionalPropertyTypes` rejects).
+  ...(isDevSideloadGateEnabled()
+    ? { optimizeDeps: { include: Object.keys(SIDELOAD_IMPORT_MAP) } }
+    : {}),
   build: {
     outDir: 'dist',
     sourcemap: true,
