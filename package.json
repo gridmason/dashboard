@@ -19,6 +19,7 @@
     "api:typecheck": "tsc -p tsconfig.server.json",
     "api:test": "vitest run server",
     "e2e": "playwright test",
+    "e2e:real-cli": "playwright test --config playwright.real-cli.config.ts",
     "e2e:install": "playwright install --with-deps chromium",
     "lighthouse": "lhci autorun"
   },

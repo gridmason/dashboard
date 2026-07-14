@@ -1,0 +1,42 @@
+{
+  "records": {
+    "read": [
+      {
+        "ref": {
+          "recordType": "example"
+        },
+        "fields": {
+          "name": "Sample example",
+          "note": "Seeded by `gridmason init` — edit fixtures/ to shape your dev data (SPEC §5)."
+        }
+      }
+    ],
+    "query": [
+      {
+        "match": {
+          "recordType": "example"
+        },
+        "result": [
+          {
+            "ref": {
+              "recordType": "example",
+              "id": "example-1"
+            },
+            "fields": {
+              "name": "Sample example",
+              "note": "Seeded by `gridmason init` — edit fixtures/ to shape your dev data (SPEC §5)."
+            }
+          }
+        ]
+      }
+    ]
+  },
+  "net": [],
+  "events": [],
+  "context": {
+    "primary": {
+      "recordType": "example",
+      "id": "example-1"
+    }
+  }
+}
