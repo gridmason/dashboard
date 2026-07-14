@@ -1,0 +1,36 @@
+/*
+ * Clock widget styling — theme tokens only (../../theme/tokens.css), so it
+ * re-themes with the shell. Light-DOM element: these rules reach it directly.
+ */
+
+gm-clock-widget {
+  display: block;
+  block-size: 100%;
+}
+
+.gm-clock {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  block-size: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--gm-line);
+  border-radius: var(--gm-radius);
+  background: var(--gm-card);
+  color: var(--gm-ink);
+}
+
+.gm-clock__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gm-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gm-clock__time {
+  font-family: var(--gm-font-mono);
+  font-size: clamp(24px, 6vw, 40px);
+  font-variant-numeric: tabular-nums;
+  color: var(--gm-ink);
+}

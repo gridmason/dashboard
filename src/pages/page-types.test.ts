@@ -1,8 +1,11 @@
 import { describe, expect, it } from 'vitest';
 import { resolveLayout } from '@gridmason/core/engine';
 import { CURRENT_LAYOUT_SCHEMA_VERSION } from '@gridmason/protocol';
-import { PLACEHOLDER_WIDGET_TAG } from '../boot/import-map';
+import { LOCAL_SOURCE, WIDGET_TAGS } from '../boot/import-map';
 import { getPageType, listPageTypes, resolvePageType } from './page-types';
+
+/** The set of first-party demo widget tags every placement must reference. */
+const KNOWN_TAGS = new Set<string>(Object.values(WIDGET_TAGS));
 
 /** Every item across a page type's default single-grid layout. */
 function items(id: string) {
@@ -27,7 +30,8 @@ describe('demo page types (FR-2, SPEC §5)', () => {
       expect(defaultLayout.hasTabs).toBe(false);
       expect(defaultLayout.grid.items.length).toBeGreaterThan(0);
       for (const item of defaultLayout.grid.items) {
-        expect(item.widgetID).toEqual({ source: 'local', tag: PLACEHOLDER_WIDGET_TAG });
+        expect(item.widgetID.source).toBe(LOCAL_SOURCE);
+        expect(KNOWN_TAGS.has(item.widgetID.tag)).toBe(true);
       }
     }
   });
@@ -48,12 +52,21 @@ describe('demo page types (FR-2, SPEC §5)', () => {
     expect(home.allow_user_customization).toBe(true);
   });
 
+  it('dashboards.home places the crasher so its default view exercises the error boundary', () => {
+    const tags = items('dashboards.home').map((i) => i.widgetID.tag);
+    expect(tags).toContain(WIDGET_TAGS.crasher);
+    expect(tags).toContain(WIDGET_TAGS.chart);
+  });
+
   it('demo.record-detail carries a typed record-ref context and a locked header slot', () => {
     const rd = getPageType('demo.record-detail')!.descriptor;
     expect(rd.context).toEqual({ record: { type: 'record-ref', recordType: 'customer' } });
     expect(rd.locks).toContain('header');
     expect(rd.allow_user_customization).toBe(true);
-    expect(items('demo.record-detail').some((i) => i.slot === 'header')).toBe(true);
+    const header = items('demo.record-detail').find((i) => i.slot === 'header');
+    expect(header).toBeDefined();
+    // The record-summary (context consumer) fills the locked header slot.
+    expect(header!.widgetID.tag).toBe(WIDGET_TAGS.recordSummary);
   });
 
   it('demo.locked is fully locked: customization off and every slot locked', () => {

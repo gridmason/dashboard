@@ -8,7 +8,7 @@ import type { PageRef } from '../routes';
 import type { GmPageCanvasElement } from './gm-page-canvas';
 import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
-import { assembleImportMap, loadWidgetsForLayout } from '../boot/import-map';
+import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
 
 // Register `<gm-page-canvas>` once, at module load. In core 0.3.0 importing the
 // canvas module no longer defines the element as a side effect — `define()` is
@@ -45,6 +45,11 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       default: { layout: pageType.defaultLayout, locks: pageType.descriptor.locks },
     });
     el.context = buildPageContext(pageType, page.entityId);
+    // Resolve a friendly display name for each widget's error-boundary fallback
+    // card (SPEC §6/§8): a failed first-party widget (e.g. the crasher demo) shows
+    // its name + Retry, while an unknown tag stays an anonymous card. The name
+    // source is the widget registry (import map), so it lives beside `describeWidget`.
+    el.widgetDescriptor = describeWidget;
 
     // Boot order (SPEC §2): lazily `import()` the referenced widget modules so
     // their custom elements are **registered before** the canvas mounts them —

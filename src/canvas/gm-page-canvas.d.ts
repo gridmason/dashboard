@@ -1,5 +1,6 @@
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from 'react';
 import type { EffectiveLayout } from '@gridmason/core/engine';
+import type { WidgetDescriptor } from '@gridmason/core/canvas';
 
 /**
  * JSX typing for core's `<gm-page-canvas>` custom element (SPEC §2), as it is in
@@ -18,6 +19,12 @@ export interface GmPageCanvasElement extends HTMLElement {
   layout: EffectiveLayout | undefined;
   /** The typed page-context value, serialized to every widget's `context` attribute. */
   context: unknown;
+  /**
+   * Resolves a display name for a widget instance's error-boundary fallback card
+   * (SPEC §6/§8). The host sets it so a failed first-party widget shows its name +
+   * Retry; an unresolved tag stays an anonymous card.
+   */
+  widgetDescriptor: WidgetDescriptor | undefined;
 }
 
 /** Attributes/props accepted on `<gm-page-canvas>` in JSX, including a typed `ref`. */
