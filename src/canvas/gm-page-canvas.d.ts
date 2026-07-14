@@ -34,6 +34,12 @@ export interface GmPageCanvasElement extends HTMLElement {
    */
   widgetDescriptor: WidgetDescriptor | undefined;
   /**
+   * The instance ids currently mounted on the active grid, in mount order. The
+   * host reads it to scope a dev hot-reload remount to instances that are actually
+   * mounted (SPEC §4, FR-9/FR-7).
+   */
+  readonly mountedInstanceIds: readonly string[];
+  /**
    * The mounted widget element for a placed instance id, or `undefined` when it
    * is not mounted (unmounted, virtualized offscreen, or in its error state). The
    * host reads it to assign each mount's per-instance interim SDK handle (FR-9).

@@ -89,28 +89,51 @@ origin, and reads the display `name` best-effort from `/manifest.json` (falling 
 to the tag). `gridmason dev`'s dev-only routes are namespaced under `/@dev/` so they
 never collide with a widget source path served from the project tree.
 
-### What works today, and two known gaps
+### What works today
 
 Verified end to end in a real browser against real `gridmason dev`
 (`npm run e2e:real-cli`, below): register origin → hot-load → distinct badge →
-mount through the shared `PageCanvas` + SDK path → per-session (a reload clears it).
+mount through the shared `PageCanvas` + SDK path → **live hot-reload on re-serve**
+→ per-session (a reload clears it).
 
-Two gaps remain, both **follow-ups** (not fixed here):
+### Live hot-reload (issue #41)
 
-- **A scaffold-template widget does not load yet.** `gridmason dev` serves the
-  entry source verbatim, and the vanilla/React/Vue templates import `@gridmason/sdk`
-  (and their framework) by **bare specifier**. The dashboard `import()`s a sideload
-  entry directly and provides **no shared `@gridmason/*` import scope**, so a bare
-  import throws `Failed to resolve module specifier "@gridmason/sdk"`. The CLI's own
-  fixture harness injects an import map for these; the dashboard would need the
-  equivalent (a shared import-map scope for sideloaded modules) to host template
-  widgets. Until then, dev-sideload a **self-contained** widget (no bare imports).
-- **Source edits do not hot-reload.** The dashboard has no `/@dev/events` (SSE)
-  listener and imports the entry at a stable URL, so an edited module is neither
-  re-fetched nor re-imported (a custom element cannot be re-`define`d either). A
-  **data/fixture** change is reflected on a fresh mount if the widget re-fetches its
-  data on mount; a **code** change needs an SSE listener that re-imports at
-  `?v=<generation>` (effectively a page reload, as the CLI harness does).
+While a dev origin is on the session allowlist, the dashboard subscribes to its
+`GET /@dev/events` SSE stream (`src/sideload/dev-events.ts`) and reacts to each
+`reload` frame by **remounting that origin's live widget instances** — no re-add,
+no manual page reload. The subscription is dev-only and torn down with the
+session/origin (the gate is revoked, the remote removed, or the provider unmounts).
+
+- `source` / `manifest` (generation bumped): the entry is re-imported at
+  `?v=<generation>` (a cache-busting fetch that also surfaces a broken edit as a
+  load error), then the instances remount.
+- `fixtures` / `context` (generation reused): a **hot data swap** — the instances
+  remount without a re-import.
+
+**The honest tradeoff.** A custom-element **tag can be defined only once per
+document**, so re-importing a fresh entry re-runs `customElements.define` as a
+no-op and the *old* class stays registered. The standalone `gridmason dev` harness
+sidesteps this with a **full-document reload**; the dashboard cannot reload the
+whole document without tearing down the session, so it does a **scoped remount**
+instead (`src/sideload/remount.ts`): it re-runs the widget's mount lifecycle, which
+lands any change the widget **re-reads on mount** (data/content it fetches), but it
+does **not** swap the element class in place — a change to the widget's own code is
+not reflected live. A true in-place code swap would need a per-generation *versioned
+tag*, which the dashboard cannot impose because `gridmason dev` serves the entry
+source verbatim (its `define` call hardcodes the tag). For a code change, restart
+the mount via the picker or reload the page.
+
+### Known gap: scaffold-template widgets
+
+**A scaffold-template widget does not load yet** (follow-up, tracked as #40, not
+fixed here). `gridmason dev` serves the entry source verbatim, and the
+vanilla/React/Vue templates import `@gridmason/sdk` (and their framework) by **bare
+specifier**. The dashboard `import()`s a sideload entry directly and provides **no
+shared `@gridmason/*` import scope**, so a bare import throws `Failed to resolve
+module specifier "@gridmason/sdk"`. The CLI's own fixture harness injects an import
+map for these; the dashboard would need the equivalent (a shared import-map scope
+for sideloaded modules) to host template widgets. Until then, dev-sideload a
+**self-contained** widget (no bare imports).
 
 ## Continuous verification
 

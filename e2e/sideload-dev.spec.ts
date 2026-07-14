@@ -7,8 +7,9 @@ import { expect, test } from '@playwright/test';
  * end to end: register a dev origin → the widget hot-loads onto the governed page
  * through the same mount path as a first-party widget → it carries the distinct
  * sideload badge on both the picker entry and the mounted card → re-serving
- * updates a fresh mount → and the allowlist is per-session (nothing persisted:
- * a reload clears it).
+ * **hot-reloads the already-mounted widget** over the dev server's SSE stream
+ * (issue #41: no re-add, no manual page reload) → and the allowlist is per-session
+ * (nothing persisted: a reload clears it).
  *
  * The test never Saves, so it writes nothing to the shared demo API — it stays
  * independent of the persistence/governance specs running in parallel.
@@ -50,11 +51,23 @@ test('a gridmason dev widget hot-loads with a badge, re-serves, and is gone afte
   // The mounted card is marked distinctly (SPEC §4: badge on the card too).
   await expect(canvas.locator('.grid-stack-item .gm-sideload-badge')).toBeVisible();
 
-  // Re-serve (the author-loop edit): a fresh mount reflects the new content.
+  // Hot-reload the author loop (issue #41): a re-serve updates the **already-
+  // mounted** widget — no re-add, no manual page reload. The dashboard subscribes
+  // to the dev server's SSE `/@dev/events`; wait for that stream to connect so the
+  // one-shot `reload` frame is not emitted into the void, then bump.
+  await expect
+    .poll(async () => (await (await page.request.get(`${DEV_ORIGIN}/__clients`)).json()).count)
+    .toBeGreaterThan(0);
+
+  // A `src/` edit (`source` reload → the entry is re-imported and the instance
+  // remounts): the live card re-reads content, becoming v2 on its own.
   await page.request.post(`${DEV_ORIGIN}/__bump`);
-  await page.getByRole('button', { name: 'Add widget' }).click();
-  await picker.locator('.gm-sl-card', { hasText: 'Field Notes' }).click();
-  await expect(canvas.getByTestId('dev-note').filter({ hasText: 'Field Notes v2' })).toBeVisible();
+  await expect(canvas.getByTestId('dev-note')).toHaveText('Field Notes v2');
+
+  // A fixture-data edit (`fixtures` reload → a hot data swap, no re-import): the
+  // same live instance re-reads its content and becomes v3.
+  await page.request.post(`${DEV_ORIGIN}/__bump-data`);
+  await expect(canvas.getByTestId('dev-note')).toHaveText('Field Notes v3');
 
   // Per-session, nothing persisted: a reload clears the allowlist and the widget.
   await page.reload();
