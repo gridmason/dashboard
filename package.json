@@ -23,7 +23,7 @@
     "lighthouse": "lhci autorun"
   },
   "dependencies": {
-    "@gridmason/core": "0.1.0",
+    "@gridmason/core": "0.3.0",
     "@gridmason/protocol": "0.0.2",
     "@gridmason/sdk": "0.0.1",
     "react": "19.2.7",

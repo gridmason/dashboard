@@ -8,7 +8,7 @@ The permanent, **product-neutral** dashboard app over [`@gridmason/core`](https:
 
 Built in React + TypeScript with Vite. Single-tenant pre-1.0. Engineering spec: [`docs/SPEC.md`](docs/SPEC.md); build plan: [`docs/specs/dashboard-v0/spec.md`](docs/specs/dashboard-v0/spec.md).
 
-> **Status: bootstrap (D-E0).** This is the app skeleton. Every route already mounts core's page canvas through the no-special-case-pages invariant (below), but the canvas renders **empty** — `@gridmason/core@0.1.0` ships `<gm-page-canvas>` as an explicit placeholder, and demo page types + widgets arrive in later epics (D-E1+). See [issue #2](https://github.com/gridmason/dashboard/issues/2).
+> **Status: static boot (D-E1).** Every route mounts core's `<gm-page-canvas>` (`@gridmason/core@0.3.0`) through the no-special-case-pages invariant (below) and renders one of four demo page types from a **local import map** — the Phase-A stand-in for federated boot (no registry). Page types are data ([`src/pages/page-types.ts`](src/pages/page-types.ts)); widgets are a Phase-A placeholder ([`src/widgets/placeholder.ts`](src/widgets/placeholder.ts)) that the first-party demo widgets replace in a later epic. See [issue #5](https://github.com/gridmason/dashboard/issues/5).
 
 ## The one invariant
 
