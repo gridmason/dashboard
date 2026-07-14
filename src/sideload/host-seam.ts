@@ -46,3 +46,24 @@ export function installSideloadHost(host: SideloadHost | null): void {
 export function sideloadHost(): SideloadHost | null {
   return installed;
 }
+
+/**
+ * The **acknowledged-sideload** seam (docs/SPEC.md §4, FR-8). Independent of the
+ * dev seam above and, unlike it, **prod-safe**: acknowledged sideload is available
+ * in production builds (SPEC §4 restricts only `dev` to dev builds), so the
+ * canvas render path consults this one on **every** build, not behind an
+ * `import.meta.env.DEV` guard. The always-on `AcknowledgedSideloadProvider`
+ * installs it; `CanvasHost` reads it back to merge acknowledged remotes into the
+ * import map and to badge acknowledged cards distinctly from dev ones.
+ */
+let acknowledgedInstalled: SideloadHost | null = null;
+
+/** Install (or clear, with `null`) the acknowledged-sideload host. Called by the always-on provider. */
+export function installAcknowledgedSideloadHost(host: SideloadHost | null): void {
+  acknowledgedInstalled = host;
+}
+
+/** The installed acknowledged-sideload host, or `null` when none is active. */
+export function acknowledgedSideloadHost(): SideloadHost | null {
+  return acknowledgedInstalled;
+}

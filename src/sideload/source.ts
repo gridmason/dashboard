@@ -18,8 +18,17 @@
  */
 import { SIDELOAD_PREFIX, sourceKind, type WidgetID } from '@gridmason/protocol';
 
-/** The distinct UI label a sideloaded widget is marked with (mockups 01 + 03). */
+/** The distinct UI label a **dev**-sideloaded widget is marked with (mockups 01 + 03). */
 export const SIDELOAD_BADGE_LABEL = 'sideload';
+
+/**
+ * The distinct UI label an **acknowledged**-sideloaded widget is marked with
+ * (mockups 01 + 03: "owner-acknowledged"). Deliberately different text — and a
+ * different CSS class (`gm-ack-badge`) — from the dev badge, so an owner sees at a
+ * glance whether unreviewed code was hot-loaded from a dev server (session-only) or
+ * persistently acknowledged for the deployment (SPEC §4, FR-8).
+ */
+export const ACKNOWLEDGED_BADGE_LABEL = 'acknowledged';
 
 /** The `source` string for a widget served from dev-server `origin` (`sideload:<origin>`). */
 export function sideloadSource(origin: string): string {

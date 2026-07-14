@@ -15,11 +15,15 @@ import type { PageRef } from '../routes';
 import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
 import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
-import type { LocalImportMap } from '../boot/import-map';
+import type { LocalImportMap, LocalRemote } from '../boot/import-map';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
-import { sideloadHost } from '../sideload/host-seam';
-import { isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
+import { acknowledgedSideloadHost, sideloadHost } from '../sideload/host-seam';
+import { ACKNOWLEDGED_BADGE_LABEL, isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
+// Acknowledged-sideload badge styling — prod-safe (acknowledged mode ships in
+// production builds), so it is a real side-effect CSS import here, unlike the
+// dev-sideload styles which the dev-only provider injects.
+import '../sideload/acknowledged.css';
 
 // Register `<gm-page-canvas>` once, at module load. In core 0.3.0 importing the
 // canvas module no longer defines the element as a side effect — `define()` is
@@ -48,33 +52,56 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
 }
 
 /**
- * The active import map for a render: the shell's local remotes, plus — in a
- * **development build** with the dev gate active — the admitted dev-sideload
- * remotes (SPEC §4, FR-7), merged in by tag so a sideloaded widget rides the
- * exact same lazy-`import()` mount path as a first-party one. In a production
- * build `import.meta.env.DEV` is a static `false`, so this is the local map
- * unchanged and the sideload seam is never even referenced.
+ * The active import map for a render: the shell's local remotes, plus the
+ * acknowledged-sideload remotes (SPEC §4, FR-8 — prod-safe, merged on every build)
+ * and, in a **development build** with the dev gate active, the admitted
+ * dev-sideload remotes (FR-7). Every sideloaded remote is merged in by tag so it
+ * rides the exact same lazy-`import()` mount path as a first-party one — an
+ * acknowledged remote's loader additionally verifies its content hash before the
+ * module runs ({@link acknowledgedRemote}). In a production build
+ * `import.meta.env.DEV` is a static `false`, so the dev seam is never referenced.
  */
 function activeImportMap(): LocalImportMap {
-  if (!import.meta.env.DEV) return importMap;
-  const host = sideloadHost();
-  if (host === null) return importMap;
+  const acknowledged = acknowledgedSideloadHost();
+  const dev = import.meta.env.DEV ? sideloadHost() : null;
+  if (acknowledged === null && dev === null) return importMap;
   const merged = new Map(importMap);
-  for (const remote of host.remotes()) merged.set(remote.tag, remote);
+  if (acknowledged !== null) for (const remote of acknowledged.remotes()) merged.set(remote.tag, remote);
+  if (dev !== null) for (const remote of dev.remotes()) merged.set(remote.tag, remote);
   return merged;
 }
 
 /**
- * Add the distinct sideload badge to a placed instance's grid item, once (SPEC §4:
+ * Add a distinct sideload badge to a placed instance's grid item, once (SPEC §4:
  * "every sideloaded widget is marked distinctly in the UI"; mockup 01 `.badge.side`).
- * Idempotent — the render fires on every reconcile, so it guards on an existing badge.
+ * The `className` + `label` distinguish an **acknowledged** remote (`gm-ack-badge`)
+ * from a **dev** one (`gm-sideload-badge`). Idempotent — the render fires on every
+ * reconcile, so it guards on an existing badge of the same kind.
  */
-function markSideloadItem(item: HTMLElement | undefined): void {
-  if (item === undefined || item.querySelector(':scope > .gm-sideload-badge') !== null) return;
+function markSideloadItem(item: HTMLElement | undefined, className: string, label: string): void {
+  if (item === undefined || item.querySelector(`:scope > .${className}`) !== null) return;
   const badge = item.ownerDocument.createElement('span');
-  badge.className = 'gm-sideload-badge';
-  badge.textContent = SIDELOAD_BADGE_LABEL;
+  badge.className = className;
+  badge.textContent = label;
   item.appendChild(badge);
+}
+
+/**
+ * The remote in `remotes` a placed instance is served by — matched by its resolved
+ * `sideload:<origin>` identity or, for a widget the picker just placed (whose
+ * identity note may land only after this synchronous render), by its mounted
+ * element's tag. `undefined` if the instance is not one of `remotes`.
+ */
+function matchSideloadRemote(
+  remotes: readonly LocalRemote[],
+  widgetId: WidgetID | undefined,
+  element: Element | undefined,
+): LocalRemote | undefined {
+  return remotes.find(
+    (remote) =>
+      (widgetId !== undefined && remote.source === widgetId.source && remote.tag === widgetId.tag) ||
+      (element !== undefined && remote.tag === element.localName),
+  );
 }
 
 /**
@@ -134,6 +161,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // be installed yet when this effect first runs.
     el.widgetDescriptor = (identity) =>
       describeWidget(identity) ??
+      acknowledgedSideloadHost()?.describe(identity.widgetID) ??
       (import.meta.env.DEV ? sideloadHost()?.describe(identity.widgetID) : undefined);
 
     // The per-mount handle inputs shared across this page's widgets (SPEC §3: one
@@ -150,6 +178,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // Drives both the interim handle and the sideload badge.
     const widgetIdOf = (instanceId: string): WidgetID | undefined =>
       widgetIds.get(instanceId) ??
+      acknowledgedSideloadHost()?.widgetIdForInstance(instanceId) ??
       (import.meta.env.DEV ? sideloadHost()?.widgetIdForInstance(instanceId) : undefined);
 
     // Assign the per-instance interim SDK handle onto one mounted widget element.
@@ -177,20 +206,29 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       for (const instanceId of placed) {
         assignHandle(instanceId);
         // Mark a sideloaded instance's card distinctly (SPEC §4). A first-party or
-        // registry widget is never a match and gets no badge. An instance is
-        // sideloaded if its resolved identity says so (persisted/re-resolved case),
-        // or — for a widget the picker just added, whose placement note lands only
-        // *after* this synchronous render — if its mounted element's tag is one an
-        // admitted dev remote defines. The seam is read fresh (see the descriptor note).
-        if (import.meta.env.DEV) {
+        // registry widget is never a match and gets no badge. An instance matches by
+        // its resolved `sideload:<origin>` identity (persisted/re-resolved case), or
+        // — for a widget the picker just added, whose placement note lands only
+        // *after* this synchronous render — by its mounted element's tag. Seams are
+        // read fresh (see the descriptor note). Acknowledged sideload is prod-safe,
+        // so its badge is decided on every build and takes precedence; the dev badge
+        // only in a dev build, and never for an already-acknowledged instance.
+        const widgetId = widgetIdOf(instanceId);
+        const element = el.widgetElement(instanceId);
+        const acknowledged = acknowledgedSideloadHost();
+        const ackMatch =
+          acknowledged === null
+            ? undefined
+            : matchSideloadRemote(acknowledged.remotes(), widgetId, element);
+        if (ackMatch !== undefined) {
+          markSideloadItem(el.itemElement(instanceId), 'gm-ack-badge', ACKNOWLEDGED_BADGE_LABEL);
+        } else if (import.meta.env.DEV) {
           const host = sideloadHost();
           if (host !== null) {
-            const widgetId = widgetIdOf(instanceId);
-            const element = el.widgetElement(instanceId);
             const sideloaded =
               (widgetId !== undefined && isSideloadedId(widgetId)) ||
               (element !== undefined && host.remotes().some((r) => r.tag === element.localName));
-            if (sideloaded) markSideloadItem(el.itemElement(instanceId));
+            if (sideloaded) markSideloadItem(el.itemElement(instanceId), 'gm-sideload-badge', SIDELOAD_BADGE_LABEL);
           }
         }
       }
