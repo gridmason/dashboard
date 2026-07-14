@@ -2,6 +2,7 @@ import { Route, Switch } from 'wouter';
 import { AppShell } from './AppShell';
 import { CanvasHost } from './canvas/CanvasHost';
 import { EditSessionProvider } from './edit/edit-session';
+import { GovernanceView } from './governance/GovernanceView';
 import { ROUTES, resolvePageRef } from './routes';
 
 /**
@@ -32,6 +33,7 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
 export function App(): React.JSX.Element {
   return (
     <Switch>
+      <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
       <Route path={ROUTES.pageEntity}>
         {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
       </Route>

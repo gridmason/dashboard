@@ -32,7 +32,11 @@ export default defineConfig({
   webServer: [
     {
       command: 'rm -rf e2e/.data && npm run api:start',
-      env: { GRIDMASON_LAYOUT_STORE: 'e2e/.data/layouts.json', PORT: '8787' },
+      env: {
+        GRIDMASON_LAYOUT_STORE: 'e2e/.data/layouts.json',
+        GRIDMASON_GOVERNANCE_STORE: 'e2e/.data/governance.json',
+        PORT: '8787',
+      },
       url: 'http://localhost:8787/api/health',
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,

@@ -43,6 +43,7 @@ import type { PageRef } from '../routes';
 import type { GmPageCanvasElement } from '../canvas/gm-page-canvas';
 import { resolvePageType, type DemoPageType } from '../pages/page-types';
 import { ApiLayoutPersistence, type LayoutPersistenceAdapter } from '../adapters/persistence';
+import { ApiGovernance, type GovernanceAdapter, type OrgPublication } from '../adapters/governance';
 import { ensureSession } from '../adapters/session/session-client';
 import { BufferedLayoutPersistence } from './buffered-persistence';
 
@@ -55,6 +56,9 @@ const DEMO_API_BASE = '';
 
 /** The org scope-node the demo publishes an org layout under (SPEC §5). */
 const ORG_NODE = 'org';
+
+/** The role a user must hold to publish an org layout (mirrors the demo API's stub, SPEC §6). */
+const PUBLISHER_ROLE = 'admin';
 
 /** The edit session a page exposes to its chrome and canvas. */
 export interface EditSession {
@@ -70,6 +74,18 @@ export interface EditSession {
   readonly editing: boolean;
   /** Whether there is a staged, unsaved edit (enables Save / Discard). */
   readonly dirty: boolean;
+  /**
+   * The page-type **default** layout — the least-specific of the three levels,
+   * shipped in code. Exposed so the governance view can render it beside the org
+   * and user levels (SPEC §5, the 3-level resolution made visible).
+   */
+  readonly defaultLayout: LayoutPage;
+  /** The **org** level currently published for this page (layout + locks), if any (SPEC §5). */
+  readonly orgPublication: OrgPublication | undefined;
+  /** The **user** level currently persisted for this page (their copy-on-write override), if any. */
+  readonly userOverride: LayoutPage | undefined;
+  /** Whether the signed-in user may publish/un-publish an org layout (the role stub, SPEC §6). */
+  readonly canPublish: boolean;
   /** Enter edit mode. Inert if the page forbids customization. */
   enter(): void;
   /** Persist the staged edit as the user's override, then leave edit mode (Save layout). */
@@ -78,6 +94,14 @@ export interface EditSession {
   discard(): Promise<void>;
   /** Delete the user override so the page falls back to the org/default layout (Reset to org default). */
   resetToDefault(): Promise<void>;
+  /**
+   * Publish `publication` as this page's org layout (operator action, SPEC §5),
+   * then re-resolve so the new org layout and its locks take effect. Requires
+   * {@link canPublish}; rejects with the API's `403` otherwise.
+   */
+  publish(publication: OrgPublication): Promise<void>;
+  /** Remove this page's org publication (operator action), then re-resolve. */
+  unpublish(): Promise<void>;
 }
 
 const EditSessionContext = createContext<EditSession | undefined>(undefined);
@@ -100,15 +124,20 @@ function scopeKey(owner: ScopeKey['owner'], page: PageRef): ScopeKey {
   };
 }
 
-/** Compose the effective layout from the upstream default/org and the user's override (SPEC §5). */
+/**
+ * Compose the effective layout from the page-type default, the org publication,
+ * and the user's override (SPEC §5). The org level contributes **both** a layout
+ * and its locks: locks are a separate resolution input, not a `LayoutPage` field,
+ * so the org's added locks merge down with the page-type's own default-level locks.
+ */
 function composeEffective(
   pageType: DemoPageType,
-  org: LayoutPage | undefined,
+  org: OrgPublication | undefined,
   override: LayoutPage | undefined,
 ): EffectiveLayout {
   return resolveLayout({
     default: { layout: pageType.defaultLayout, locks: pageType.descriptor.locks },
-    ...(org !== undefined ? { org: { layout: org } } : {}),
+    ...(org !== undefined ? { org: { layout: org.layout, locks: org.locks } } : {}),
     ...(override !== undefined ? { user: { layout: override } } : {}),
   });
 }
@@ -126,6 +155,7 @@ export function EditSessionProvider({
 }): React.JSX.Element {
   const canvasRef = useRef<GmPageCanvasElement | null>(null);
   const adapterRef = useRef<LayoutPersistenceAdapter | null>(null);
+  const governanceRef = useRef<GovernanceAdapter | null>(null);
   const controllerRef = useRef<EditController | null>(null);
   const bufferRef = useRef<BufferedLayoutPersistence | null>(null);
   const pageTypeRef = useRef<DemoPageType | null>(null);
@@ -138,6 +168,13 @@ export function EditSessionProvider({
   const [canEdit, setCanEdit] = useState(false);
   const [editing, setEditing] = useState(false);
   const [dirty, setDirty] = useState(false);
+  // The three resolution levels, surfaced so the governance view can render them.
+  const [defaultLayout, setDefaultLayout] = useState<LayoutPage>(
+    () => resolvePageType(page.pageType).defaultLayout,
+  );
+  const [orgPublication, setOrgPublication] = useState<OrgPublication | undefined>(undefined);
+  const [userOverride, setUserOverride] = useState<LayoutPage | undefined>(undefined);
+  const [canPublish, setCanPublish] = useState(false);
 
   /**
    * Build a fresh {@link EditController} bound to the live canvas element, seeded
@@ -162,22 +199,26 @@ export function EditSessionProvider({
   }, []);
 
   /**
-   * Fetch the user override (and any org layout) for the current page, compose the
-   * effective layout, publish it, and rebind the controller. Guarded by `epoch` so
+   * Fetch the user override (from the layout KV) and the org publication (from the
+   * governance store) for the current page, compose the effective layout, publish
+   * it, surface the three levels, and rebind the controller. Guarded by `epoch` so
    * a resolution for a superseded route never wins.
    */
   const resolveAndBind = useCallback(
     async (epoch: number) => {
       const adapter = adapterRef.current;
+      const governance = governanceRef.current;
       const pageType = pageTypeRef.current;
-      if (adapter === null || pageType === null) return;
+      if (adapter === null || governance === null || pageType === null) return;
       const [override, org] = await Promise.all([
         adapter.get(scopeKey('user', page)),
-        adapter.get(scopeKey({ node: ORG_NODE }, page)),
+        governance.get(scopeKey({ node: ORG_NODE }, page)),
       ]);
       if (epochRef.current !== epoch) return;
       const composed = composeEffective(pageType, org, override);
       setEffective(composed);
+      setOrgPublication(org);
+      setUserOverride(override);
       bindController(composed, page, pageType);
     },
     [page, bindController],
@@ -189,6 +230,9 @@ export function EditSessionProvider({
     pageTypeRef.current = pageType;
     setReady(false);
     setCanEdit(pageType.descriptor.allow_user_customization);
+    setDefaultLayout(pageType.defaultLayout);
+    setOrgPublication(undefined);
+    setUserOverride(undefined);
     // Render the default layout immediately so the canvas is never blank while the
     // session and the user's override are fetched (SPEC §7: the shell never blocks).
     setEffective(composeEffective(pageType, undefined, undefined));
@@ -198,6 +242,9 @@ export function EditSessionProvider({
         const user = await ensureSession(DEMO_API_BASE);
         if (epochRef.current !== epoch) return;
         adapterRef.current = new ApiLayoutPersistence({ userId: user.id, baseUrl: DEMO_API_BASE });
+        governanceRef.current = new ApiGovernance({ userId: user.id, baseUrl: DEMO_API_BASE });
+        // The role stub (SPEC §6): only a publisher may publish an org layout.
+        setCanPublish(user.roles.includes(PUBLISHER_ROLE));
         await resolveAndBind(epoch);
       } catch {
         // Degraded mode: the demo API is unreachable, so there is no session to
@@ -253,6 +300,33 @@ export function EditSessionProvider({
     await resolveAndBind(epochRef.current);
   }, [page, resolveAndBind]);
 
+  const publish = useCallback(
+    async (publication: OrgPublication) => {
+      const governance = governanceRef.current;
+      if (governance === null) return;
+      // Publish to the org scope, then re-resolve so the org layout and its locks
+      // take effect (the operator half of the governance demo, SPEC §5). Any staged
+      // user edit is dropped: republishing rebuilds the copy-on-write baseline.
+      await governance.publish(scopeKey({ node: ORG_NODE }, page), publication);
+      bufferRef.current?.clear();
+      controllerRef.current?.exit();
+      setEditing(false);
+      await resolveAndBind(epochRef.current);
+    },
+    [page, resolveAndBind],
+  );
+
+  const unpublish = useCallback(async () => {
+    const governance = governanceRef.current;
+    if (governance !== null) {
+      await governance.unpublish(scopeKey({ node: ORG_NODE }, page));
+    }
+    bufferRef.current?.clear();
+    controllerRef.current?.exit();
+    setEditing(false);
+    await resolveAndBind(epochRef.current);
+  }, [page, resolveAndBind]);
+
   const session: EditSession = {
     canvasRef,
     effective,
@@ -260,10 +334,16 @@ export function EditSessionProvider({
     canEdit,
     editing,
     dirty,
+    defaultLayout,
+    orgPublication,
+    userOverride,
+    canPublish,
     enter,
     save,
     discard,
     resetToDefault,
+    publish,
+    unpublish,
   };
 
   return <EditSessionContext.Provider value={session}>{children}</EditSessionContext.Provider>;
