@@ -24,8 +24,8 @@
   },
   "dependencies": {
     "@gridmason/core": "0.3.0",
-    "@gridmason/protocol": "0.0.2",
-    "@gridmason/sdk": "0.0.1",
+    "@gridmason/protocol": "0.0.3",
+    "@gridmason/sdk": "0.2.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
     "wouter": "3.10.0"
@@ -41,5 +41,8 @@
     "typescript": "7.0.2",
     "vite": "8.1.4",
     "vitest": "4.1.10"
+  },
+  "overrides": {
+    "@gridmason/protocol": "0.0.3"
   }
 }

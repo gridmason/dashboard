@@ -1,5 +1,6 @@
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from 'react';
 import type { EffectiveLayout } from '@gridmason/core/engine';
+import type { WidgetDescriptor } from '@gridmason/core/canvas';
 
 /**
  * JSX typing for core's `<gm-page-canvas>` custom element (SPEC §2), as it is in
@@ -26,6 +27,18 @@ export interface GmPageCanvasElement extends HTMLElement {
   editMode: boolean;
   /** The active tab index for a tabbed layout (0 for a single-grid page). */
   activeTab: number;
+  /**
+   * Resolves a display name for a widget instance's error-boundary fallback card
+   * (SPEC §6/§8). The host sets it so a failed first-party widget shows its name +
+   * Retry; an unresolved tag stays an anonymous card.
+   */
+  widgetDescriptor: WidgetDescriptor | undefined;
+  /**
+   * The mounted widget element for a placed instance id, or `undefined` when it
+   * is not mounted (unmounted, virtualized offscreen, or in its error state). The
+   * host reads it to assign each mount's per-instance interim SDK handle (FR-9).
+   */
+  widgetElement(instanceId: string): HTMLElement | undefined;
 }
 
 /** Attributes/props accepted on `<gm-page-canvas>` in JSX, including a typed `ref`. */

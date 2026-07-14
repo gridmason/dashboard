@@ -1,0 +1,46 @@
+/*
+ * Record-summary widget styling — theme tokens only (../../theme/tokens.css).
+ */
+
+gm-record-summary-widget {
+  display: block;
+  block-size: 100%;
+}
+
+.gm-record-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  block-size: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--gm-line);
+  border-radius: var(--gm-radius);
+  background: var(--gm-card);
+  color: var(--gm-ink);
+}
+
+.gm-record-summary__kind {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--gm-copper);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gm-record-summary__id {
+  font-family: var(--gm-font-mono);
+  font-size: 20px;
+  color: var(--gm-ink);
+}
+
+.gm-record-summary__note {
+  font-size: 12px;
+  color: var(--gm-ink-soft);
+}
+
+.gm-record-summary__empty {
+  margin: auto 0;
+  font-size: 13px;
+  font-style: italic;
+  color: var(--gm-ink-soft);
+}

@@ -1,0 +1,65 @@
+/*
+ * Markdown widget styling — theme tokens only (../../theme/tokens.css).
+ * Light-DOM element; rules reach its rendered subset markup directly.
+ */
+
+gm-markdown-widget {
+  display: block;
+  block-size: 100%;
+}
+
+.gm-markdown {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  block-size: 100%;
+  overflow: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--gm-line);
+  border-radius: var(--gm-radius);
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  font-family: var(--gm-font-sans);
+  line-height: 1.5;
+}
+
+.gm-markdown__label {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--gm-ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gm-markdown__body h1,
+.gm-markdown__body h2,
+.gm-markdown__body h3 {
+  margin: 0.4em 0 0.2em;
+  line-height: 1.25;
+}
+
+.gm-markdown__body h1 { font-size: 20px; }
+.gm-markdown__body h2 { font-size: 17px; }
+.gm-markdown__body h3 { font-size: 15px; }
+
+.gm-markdown__body p,
+.gm-markdown__body ul {
+  margin: 0.4em 0;
+}
+
+.gm-markdown__body ul {
+  padding-inline-start: 1.2em;
+}
+
+.gm-markdown__body a {
+  color: var(--gm-copper);
+}
+
+.gm-markdown__body code {
+  padding: 1px 5px;
+  border-radius: 5px;
+  background: var(--gm-code);
+  font-family: var(--gm-font-mono);
+  font-size: 0.9em;
+}
