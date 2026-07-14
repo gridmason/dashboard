@@ -42,6 +42,7 @@ import { resolveLayout, type EffectiveLayout, type ScopeKey } from '@gridmason/c
 import type { PageRef } from '../routes';
 import type { GmPageCanvasElement } from '../canvas/gm-page-canvas';
 import { resolvePageType, type DemoPageType } from '../pages/page-types';
+import { assembleImportMap, loadWidgetsForLayout } from '../boot/import-map';
 import { ApiLayoutPersistence, type LayoutPersistenceAdapter } from '../adapters/persistence';
 import { ApiGovernance, type GovernanceAdapter, type OrgPublication } from '../adapters/governance';
 import { ensureSession } from '../adapters/session/session-client';
@@ -225,6 +226,16 @@ export function EditSessionProvider({
       ]);
       if (epochRef.current !== epoch) return;
       const composed = composeEffective(pageType, org, override);
+      // Register the composed layout's first-party widget modules before binding the
+      // controller: `new EditController` syncs the layout onto the canvas synchronously
+      // in its constructor, and core's widget boundary sends any tag still undefined at
+      // that mount straight to its permanent "unavailable" card (a survivor is never
+      // re-upgraded). CanvasHost also loads these (idempotently) but sets the layout only
+      // after awaiting — the controller does not, so without this preload a first-party
+      // widget can lose the import race and stick as a fallback card. Sideload remotes
+      // are already defined at registration time, so the first-party map suffices here.
+      await loadWidgetsForLayout(assembleImportMap(), composed.layout);
+      if (epochRef.current !== epoch) return;
       setEffective(composed);
       setOrgPublication(org);
       setUserOverride(override);

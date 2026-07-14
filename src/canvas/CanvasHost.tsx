@@ -254,16 +254,6 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     void loadWidgetsForLayout(activeImportMap(), effective.layout).finally(() => {
       if (!active || canvasRef.current !== el) return;
       el.layout = effective;
-      // Relayout nudge: gridstack (core's canvas binding) sizes each item as a
-      // percentage of the grid width, but the items it places on this first mount
-      // render collapsed until a reflow re-resolves them — its own resize path is
-      // what recomputes them. Dispatching gridstack's window-resize handler once,
-      // after the layout is applied, triggers that recompute so the grid reaches
-      // full width without a lingering collapsed state. Idempotent and harmless;
-      // remove once the core binding lays out correctly on mount (gridmason/core#63).
-      requestAnimationFrame(() => {
-        if (active && canvasRef.current === el) window.dispatchEvent(new Event('resize'));
-      });
     });
 
     return () => {
