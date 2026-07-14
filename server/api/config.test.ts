@@ -7,7 +7,7 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { ConfigError, DEFAULT_CONFIG_PATH, loadConfig } from '../config/index';
+import { ConfigError, DEFAULT_CONFIG_PATH, loadConfig, sideloadMode } from '../config/index';
 
 describe('api/config', () => {
   let dir: string;
@@ -27,6 +27,41 @@ describe('api/config', () => {
     expect(config.users.map((u) => u.username)).toContain('alice');
     expect(config.gates['widgets.chart']).toBe(true);
     expect(config.gates['widgets.crasher']).toBe(false);
+  });
+
+  it('reads the shipped sideload posture as off — the config-visible default', () => {
+    expect(sideloadMode(loadConfig(DEFAULT_CONFIG_PATH))).toBe('off');
+  });
+
+  it('defaults the sideload posture to off when the config omits a `sideload` block', () => {
+    const path = writeConfig(
+      JSON.stringify({ users: [{ id: 'a', username: 'a', password: 'p' }], gates: {} }),
+    );
+    const config = loadConfig(path);
+    expect(config.sideload).toBeUndefined();
+    expect(sideloadMode(config)).toBe('off');
+  });
+
+  it('accepts an explicit acknowledged posture', () => {
+    const path = writeConfig(
+      JSON.stringify({
+        users: [{ id: 'a', username: 'a', password: 'p' }],
+        gates: {},
+        sideload: { mode: 'acknowledged' },
+      }),
+    );
+    expect(sideloadMode(loadConfig(path))).toBe('acknowledged');
+  });
+
+  it('throws on an unknown sideload posture rather than resolving it permissively', () => {
+    const path = writeConfig(
+      JSON.stringify({
+        users: [{ id: 'a', username: 'a', password: 'p' }],
+        gates: {},
+        sideload: { mode: 'on' },
+      }),
+    );
+    expect(() => loadConfig(path)).toThrow(/sideload\.mode/);
   });
 
   it('throws on invalid JSON', () => {

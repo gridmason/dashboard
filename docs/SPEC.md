@@ -50,6 +50,8 @@ Common to `dev` and `acknowledged`: unlocked only by an **owner acknowledgement*
 
 `dev` mode is the widget-author loop: `gridmason dev` serves the remote locally; the dashboard hot-loads it; `gridmason lint` runs the same automated checks a registry review runs. The dashboard ships with `dev` enabled in development builds only.
 
+Operator-facing guidance — how to enable each mode and the Phase-A honesty caveat (no verify chain yet — run only widgets you built or reviewed yourself) — lives in [docs/sideload.md](./sideload.md).
+
 ## 5. Demo content (ships with the app)
 
 - Page types: `dashboards.home` (free canvas), `demo.record-detail` (typed `record-ref` context + locked header slot), `demo.locked` (fully locked page), `demo.full-canvas` (one maximized locked widget — proves the no-special-case rule).

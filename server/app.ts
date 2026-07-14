@@ -15,23 +15,34 @@
  *   GET    /api/governance/:scope/:pageType[/:entityId] (auth)   read OrgPublication
  *   PUT    /api/governance/:scope/:pageType[/:entityId] (admin)  publish org layout+locks
  *   DELETE /api/governance/:scope/:pageType[/:entityId] (admin)  unpublish
+ *   GET    /api/sideload                                (auth)   list acknowledged registrations
+ *   POST   /api/sideload                                (admin)  register a hash-pinned remote by URL
+ *   DELETE /api/sideload?url=<encoded>                  (admin)  deregister a remote
  *
- * Publishing (and un-publishing) an org layout is the one privileged action — it
- * is gated on the caller holding the publisher role **and** the `governance.publish`
- * config gate being on (SPEC §5/§6, the simple role stub). Everything else is
- * gated only on a valid stub-login session.
+ * Publishing (and un-publishing) an org layout, and registering (or deregistering)
+ * an acknowledged-sideload remote, are the privileged actions — gated on the
+ * caller holding the publisher role (governance additionally requires the
+ * `governance.publish` config gate). Registering an acknowledged remote *is* the
+ * owner acknowledgement (SPEC §4, FR-8): the session user is recorded as
+ * `acknowledgedBy`, so an unauthenticated or non-owner caller can never pin one.
+ * Everything else is gated only on a valid stub-login session.
  *
  * `createApp` returns an unlistened server so callers (and tests) own the port.
  */
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { AuthService, SessionUser } from './auth/index';
-import type { DemoConfig } from './config/index';
+import { sideloadMode, type DemoConfig } from './config/index';
 import { isLayoutDoc, type LayoutKey, type LayoutStore } from './layout-store/index';
 import {
   isOrgPublication,
   type GovernanceKey,
   type GovernanceStore,
 } from './governance-store/index';
+import {
+  acknowledgedScriptSrc,
+  parseRegistrationInput,
+  type SideloadRegistrationStore,
+} from './sideload-store/index';
 import {
   BadRequestError,
   clearSessionCookie,
@@ -54,6 +65,7 @@ export interface AppDeps {
   readonly config: DemoConfig;
   readonly store: LayoutStore;
   readonly governance: GovernanceStore;
+  readonly sideload: SideloadRegistrationStore;
   readonly auth: AuthService;
 }
 
@@ -94,6 +106,11 @@ async function handle(deps: AppDeps, req: IncomingMessage, res: ServerResponse):
 
   if (segments[1] === 'governance') {
     await handleGovernance(deps, req, res, method, segments.slice(2));
+    return;
+  }
+
+  if (segments[1] === 'sideload') {
+    await handleSideload(deps, req, res, method, segments.slice(2), url);
     return;
   }
 
@@ -263,6 +280,83 @@ async function handleGovernance(
   sendJson(res, 405, { error: 'method_not_allowed' });
 }
 
+async function handleSideload(
+  deps: AppDeps,
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  rest: readonly string[],
+  url: URL,
+): Promise<void> {
+  const user = requireAuth(deps, req, res);
+  if (user === undefined) return;
+
+  // The collection endpoint only — a registration is addressed by its `url` query
+  // param, not a path segment (a URL cannot be a clean path segment).
+  if (rest.length !== 0) {
+    sendJson(res, 404, { error: 'not_found' });
+    return;
+  }
+
+  // Reading the acknowledged registrations needs only a session — the dashboard
+  // client fetches them to assemble the import map and badge sideloaded cards, and
+  // the list is the config-visible record of which origins an owner permitted. The
+  // response also reports the configured `mode` and the `scriptSrc` origins the
+  // deployment's CSP permits under it — empty unless the mode is `acknowledged`, so
+  // the config record itself shows the production CSP is not relaxed by default.
+  if (method === 'GET') {
+    const mode = sideloadMode(deps.config);
+    const registrations = deps.sideload.list();
+    sendJson(res, 200, {
+      mode,
+      registrations,
+      scriptSrc: acknowledgedScriptSrc(mode, registrations),
+    });
+    return;
+  }
+
+  // Registering (and deregistering) is the privileged owner action — the caller
+  // must hold the publisher role. Registering *is* the acknowledgement: the
+  // session user is recorded as `acknowledgedBy` (never taken from the body), so
+  // an acknowledged remote can only be pinned by an authenticated owner (SPEC §4).
+  if (method === 'POST' || method === 'DELETE') {
+    if (!isOwner(user)) {
+      sendJson(res, 403, { error: 'forbidden' });
+      return;
+    }
+
+    if (method === 'DELETE') {
+      const target = url.searchParams.get('url');
+      if (target === null || target === '') {
+        sendJson(res, 400, { error: 'a "url" query parameter is required' });
+        return;
+      }
+      const existed = deps.sideload.delete(target);
+      sendEmpty(res, existed ? 204 : 404);
+      return;
+    }
+
+    let body: Record<string, unknown>;
+    try {
+      body = await readJsonBody(req);
+    } catch (err) {
+      sendJson(res, 400, { error: err instanceof BadRequestError ? err.message : 'bad_request' });
+      return;
+    }
+    // Force `acknowledgedBy` from the session so a client can never spoof who
+    // acknowledged the risk; the URL-only + SRI-hash validation lives in the store.
+    const parsed = parseRegistrationInput({ ...body, acknowledgedBy: user.id });
+    if (!parsed.ok) {
+      sendJson(res, 400, { error: parsed.error });
+      return;
+    }
+    sendJson(res, 201, { registration: deps.sideload.put(parsed.value) });
+    return;
+  }
+
+  sendJson(res, 405, { error: 'method_not_allowed' });
+}
+
 /**
  * Whether `user` may publish an org layout: they hold the publisher role and the
  * `governance.publish` config gate is on. The simple role stub (SPEC §6) — real
@@ -270,6 +364,17 @@ async function handleGovernance(
  */
 function canPublish(config: DemoConfig, user: SessionUser): boolean {
   return config.gates[PUBLISH_GATE] === true && user.roles.includes(PUBLISHER_ROLE);
+}
+
+/**
+ * Whether `user` may register an acknowledged-sideload remote — they hold the
+ * publisher role (the owner/operator, not an end user). Unlike governance publish
+ * this has no config gate: registering *is* the explicit, per-remote owner
+ * acknowledgement (SPEC §4). Whether the `acknowledged` mode is off by default is
+ * enforced separately (D-E2.3 / #13).
+ */
+function isOwner(user: SessionUser): boolean {
+  return user.roles.includes(PUBLISHER_ROLE);
 }
 
 /** Build a {@link GovernanceKey} / {@link LayoutKey} from the `[scope, pageType, entityId?]` path tail. */

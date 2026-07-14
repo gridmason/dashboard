@@ -1,9 +1,12 @@
+import type { ReactNode } from 'react';
 import { Route, Switch } from 'wouter';
 import { AppShell } from './AppShell';
 import { CanvasHost } from './canvas/CanvasHost';
 import { EditSessionProvider } from './edit/edit-session';
 import { GovernanceView } from './governance/GovernanceView';
 import { ROUTES, resolvePageRef } from './routes';
+import { DevSideloadProvider } from './sideload';
+import { AcknowledgedSideloadProvider } from './sideload/AcknowledgedSideloadContext';
 
 /**
  * Resolve raw route params to a page ref and render the single canvas host
@@ -29,18 +32,39 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
  * type never adds a route component, only data. The trailing catch-all route
  * keeps unknown paths on the canvas host (resolving the default page type)
  * rather than dead-ending — the app always renders a canvas.
+ *
+ * The whole app is wrapped in the **acknowledged**-sideload session (SPEC §4,
+ * FR-8), which is prod-safe — acknowledged mode is available in production builds —
+ * so it is mounted on every build. In a **development build only** the router is
+ * additionally wrapped in the **dev**-sideload session (FR-7): `import.meta.env.DEV`
+ * is a static `false` in a production build, so `<DevSideloadProvider>` is dead
+ * code there and drops the entire dev `./sideload` subtree from the bundle — dev
+ * sideload is unavailable in production (`production-gate.test.ts`, `sideload-gate`
+ * e2e), while acknowledged sideload stays available.
  */
 export function App(): React.JSX.Element {
   return (
-    <Switch>
-      <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
-      <Route path={ROUTES.pageEntity}>
-        {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
-      </Route>
-      <Route path={ROUTES.page}>
-        {(params) => <PageView pageType={params.pageType} />}
-      </Route>
-      <Route>{() => <PageView />}</Route>
-    </Switch>
+    <AcknowledgedSideloadProvider>
+      {withDevSideload(
+        <Switch>
+          <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
+          <Route path={ROUTES.pageEntity}>
+            {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
+          </Route>
+          <Route path={ROUTES.page}>
+            {(params) => <PageView pageType={params.pageType} />}
+          </Route>
+          <Route>{() => <PageView />}</Route>
+        </Switch>,
+      )}
+    </AcknowledgedSideloadProvider>
   );
+}
+
+/** Wrap the app in the dev-sideload provider in a dev build; a no-op in production. */
+function withDevSideload(children: ReactNode): React.JSX.Element {
+  if (import.meta.env.DEV) {
+    return <DevSideloadProvider>{children}</DevSideloadProvider>;
+  }
+  return <>{children}</>;
 }

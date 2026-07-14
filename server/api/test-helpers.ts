@@ -9,6 +9,7 @@ import { AuthService } from '../auth/index';
 import type { DemoConfig } from '../config/index';
 import { LayoutStore, type LayoutDoc } from '../layout-store/index';
 import { GovernanceStore } from '../governance-store/index';
+import { SideloadRegistrationStore } from '../sideload-store/index';
 
 /** A two-user config matching the checked-in sample's shape. */
 export function makeConfig(): DemoConfig {
@@ -43,25 +44,28 @@ export interface TestServer {
   readonly baseUrl: string;
   readonly store: LayoutStore;
   readonly governance: GovernanceStore;
+  readonly sideload: SideloadRegistrationStore;
   close(): Promise<void>;
 }
 
 /**
  * Boot the demo API on an ephemeral port with in-memory stores. Returns the base
- * URL, the layout + governance stores (for direct assertions), and a `close`
- * teardown.
+ * URL, the layout + governance + sideload stores (for direct assertions), and a
+ * `close` teardown.
  */
 export async function startTestServer(config: DemoConfig = makeConfig()): Promise<TestServer> {
   const store = new LayoutStore();
   const governance = new GovernanceStore();
+  const sideload = new SideloadRegistrationStore();
   const auth = new AuthService(config);
-  const server = createApp({ config, store, governance, auth });
+  const server = createApp({ config, store, governance, sideload, auth });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
     baseUrl: `http://127.0.0.1:${port}`,
     store,
     governance,
+    sideload,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
 }

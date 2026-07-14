@@ -39,6 +39,14 @@ export interface GmPageCanvasElement extends HTMLElement {
    * host reads it to assign each mount's per-instance interim SDK handle (FR-9).
    */
   widgetElement(instanceId: string): HTMLElement | undefined;
+  /**
+   * The gridstack **item** element (`.grid-stack-item`) wrapping a placed
+   * instance, or `undefined` when it is not placed on the active grid. The host
+   * reads it to overlay the distinct sideload badge on a dev-sideloaded widget's
+   * card (SPEC §4) — the item is the card-level surface, so the badge rides the
+   * widget through drag/resize.
+   */
+  itemElement(instanceId: string): HTMLElement | undefined;
 }
 
 /** Attributes/props accepted on `<gm-page-canvas>` in JSX, including a typed `ref`. */
