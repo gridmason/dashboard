@@ -6,6 +6,7 @@ import { EditSessionProvider } from './edit/edit-session';
 import { GovernanceView } from './governance/GovernanceView';
 import { ROUTES, resolvePageRef } from './routes';
 import { DevSideloadProvider } from './sideload';
+import { AcknowledgedSideloadProvider } from './sideload/AcknowledgedSideloadContext';
 
 /**
  * Resolve raw route params to a page ref and render the single canvas host
@@ -32,24 +33,31 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
  * keeps unknown paths on the canvas host (resolving the default page type)
  * rather than dead-ending — the app always renders a canvas.
  *
- * In a **development build only** the router is wrapped in the dev-sideload
- * session (SPEC §4, FR-7): `import.meta.env.DEV` is a static `false` in a
- * production build, so `<DevSideloadProvider>` is dead code there and drops the
- * entire `./sideload` subtree from the bundle — dev sideload is unavailable in
- * production (`production-gate.test.ts`, `sideload-gate` e2e).
+ * The whole app is wrapped in the **acknowledged**-sideload session (SPEC §4,
+ * FR-8), which is prod-safe — acknowledged mode is available in production builds —
+ * so it is mounted on every build. In a **development build only** the router is
+ * additionally wrapped in the **dev**-sideload session (FR-7): `import.meta.env.DEV`
+ * is a static `false` in a production build, so `<DevSideloadProvider>` is dead
+ * code there and drops the entire dev `./sideload` subtree from the bundle — dev
+ * sideload is unavailable in production (`production-gate.test.ts`, `sideload-gate`
+ * e2e), while acknowledged sideload stays available.
  */
 export function App(): React.JSX.Element {
-  return withDevSideload(
-    <Switch>
-      <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
-      <Route path={ROUTES.pageEntity}>
-        {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
-      </Route>
-      <Route path={ROUTES.page}>
-        {(params) => <PageView pageType={params.pageType} />}
-      </Route>
-      <Route>{() => <PageView />}</Route>
-    </Switch>,
+  return (
+    <AcknowledgedSideloadProvider>
+      {withDevSideload(
+        <Switch>
+          <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
+          <Route path={ROUTES.pageEntity}>
+            {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
+          </Route>
+          <Route path={ROUTES.page}>
+            {(params) => <PageView pageType={params.pageType} />}
+          </Route>
+          <Route>{() => <PageView />}</Route>
+        </Switch>,
+      )}
+    </AcknowledgedSideloadProvider>
   );
 }
 

@@ -1,0 +1,35 @@
+/*
+ * Acknowledged-sideload badge styling (docs/SPEC.md §4, FR-8; mockups
+ * 01-canvas.html + 03-add-widget-picker.html). Unlike the dev-sideload styles
+ * (`sideload.css`, injected only by the dev-only provider), this is **prod-safe**:
+ * acknowledged sideload is available in production builds, so its badge must be
+ * styled there too. It is imported as a side effect by `CanvasHost`, which is on
+ * the shared render path.
+ *
+ * The badge is deliberately distinct from the dev `.gm-sideload-badge` (an amber
+ * outline): a **filled copper** chip, so a persistently-acknowledged, unreviewed
+ * remote reads differently from a session-only dev one — and never like a signed
+ * first-party widget. Styled through the shell theme tokens (`--gm-*`), so it
+ * re-themes in light and dark with the rest of the app.
+ */
+.gm-ack-badge {
+  font-family: var(--gm-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--gm-copper);
+  color: #fff;
+  background: var(--gm-copper);
+  white-space: nowrap;
+}
+
+/* The badge overlaid on a placed acknowledged widget's grid item (canvas card). */
+.grid-stack-item > .gm-ack-badge {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  pointer-events: none;
+}

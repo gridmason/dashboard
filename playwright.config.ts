@@ -6,6 +6,7 @@ import { defineConfig, devices } from '@playwright/test';
 const PREVIEW_PORT = Number(process.env.GM_E2E_PREVIEW_PORT ?? '4173');
 const DEV_PORT = Number(process.env.GM_E2E_DEV_PORT ?? '5173');
 const DEV_WIDGET_PORT = Number(process.env.GM_E2E_WIDGET_PORT ?? '6070');
+const ACK_WIDGET_PORT = Number(process.env.GM_E2E_ACK_WIDGET_PORT ?? '6071');
 const API_PORT = Number(process.env.GM_E2E_API_PORT ?? '8787');
 // The dev/preview servers proxy `/api` to this URL (vite.config.ts), so it must
 // track API_PORT when that is overridden.
@@ -17,11 +18,14 @@ const API_URL = `http://localhost:${API_PORT}`;
  * - **`chromium`** runs the suite against the built static bundle served by
  *   `vite preview` — the real **production** output. The sideload **gate** spec
  *   lives here: it proves dev sideload is absent from a production build. It skips
- *   the dev-only sideload spec.
- * - **`chromium-dev`** runs the dev-sideload author-loop spec against `vite dev`
- *   with the dev gate on (`GRIDMASON_DEV_SIDELOAD=1`, which turns on the dev-only
- *   CSP relaxation), plus the stand-in `gridmason dev` widget server. Dev sideload
- *   ships in development builds only, so its behaviour can only be exercised here.
+ *   the dev-only sideload specs.
+ * - **`chromium-dev`** runs the dev-sideload author-loop spec **and** the
+ *   acknowledged-sideload spec against `vite dev` with the dev gate on
+ *   (`GRIDMASON_DEV_SIDELOAD=1`, which turns on the dev-only CSP relaxation), plus
+ *   the stand-in `gridmason dev` + acknowledged widget servers. The dev author loop
+ *   ships in development builds only; the acknowledged spec drives the picker's
+ *   register/place authoring flow (also dev-surfaced in Phase A), while the
+ *   registration + hash-verified load it exercises is prod-safe.
  *
  * Run `npm run build` before `npm run e2e` (CI does both) so `vite preview` serves
  * a current bundle.
@@ -38,14 +42,15 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      // The production-parity project: everything except the dev-only author loop.
-      testIgnore: '**/sideload-dev.spec.ts',
+      // The production-parity project: everything except the dev-server-driven
+      // sideload specs (the dev author loop and the acknowledged register/place flow).
+      testIgnore: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts'],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
     },
     {
       name: 'chromium-dev',
-      // The dev-only author loop, driven against the dev server with the gate on.
-      testMatch: '**/sideload-dev.spec.ts',
+      // The dev-server-driven sideload specs, run against the dev server with the gate on.
+      testMatch: ['**/sideload-dev.spec.ts', '**/sideload-acknowledged.spec.ts'],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${DEV_PORT}` },
     },
   ],
@@ -59,6 +64,7 @@ export default defineConfig({
       env: {
         GRIDMASON_LAYOUT_STORE: 'e2e/.data/layouts.json',
         GRIDMASON_GOVERNANCE_STORE: 'e2e/.data/governance.json',
+        GRIDMASON_SIDELOAD_STORE: 'e2e/.data/sideload.json',
         PORT: String(API_PORT),
       },
       url: `${API_URL}/api/health`,
@@ -85,6 +91,13 @@ export default defineConfig({
       command: 'node e2e/fixtures/dev-widget-server.mjs',
       env: { DEV_WIDGET_PORT: String(DEV_WIDGET_PORT) },
       url: `http://localhost:${DEV_WIDGET_PORT}/gridmason.widget.json`,
+      reuseExistingServer: !process.env.CI,
+      timeout: 30_000,
+    },
+    {
+      command: 'node e2e/fixtures/acknowledged-widget-server.mjs',
+      env: { ACK_WIDGET_PORT: String(ACK_WIDGET_PORT) },
+      url: `http://localhost:${ACK_WIDGET_PORT}/gridmason.widget.json`,
       reuseExistingServer: !process.env.CI,
       timeout: 30_000,
     },
