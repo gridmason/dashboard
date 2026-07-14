@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import type { PageRef } from './routes';
 import { resolvePageType } from './pages/page-types';
 import { useEditSession } from './edit/edit-session';
+import { DevSideloadControls } from './sideload';
 import './AppShell.css';
 
 /**
@@ -70,6 +71,10 @@ export function AppShell({
             the org/default layout. Hidden entirely on a page that forbids customization. */}
         {editing ? (
           <>
+            {/* Dev-sideload author loop (SPEC §4): the Add-widget picker for
+                `gridmason dev` remotes. Development builds only — dead code, and
+                so dropped, in a production build (`import.meta.env.DEV`). */}
+            {import.meta.env.DEV ? <DevSideloadControls page={page} /> : null}
             <button
               type="button"
               className="gm-btn"
