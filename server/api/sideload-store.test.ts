@@ -11,8 +11,10 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import {
+  acknowledgedScriptSrc,
   parseRegistrationInput,
   SideloadRegistrationStore,
+  type SideloadRegistration,
 } from '../sideload-store/index';
 import { loginCookie, startTestServer, type TestServer } from './test-helpers';
 
@@ -54,6 +56,39 @@ describe('api/sideload-store', () => {
       const parsed = parseRegistrationInput({ url: REMOTE_URL, hash: PIN });
       expect(parsed.ok).toBe(false);
       if (!parsed.ok) expect(parsed.error).toMatch(/acknowledgedBy/);
+    });
+  });
+
+  describe('acknowledgedScriptSrc (config-recorded CSP authority — off by default)', () => {
+    const registrations: SideloadRegistration[] = [
+      { url: REMOTE_URL, origin: 'https://widgets.internal.acme', hash: PIN, acknowledgedBy: 'alice', at: '2026-07-14T00:00:00.000Z' },
+      { url: 'https://other.example/w/gridmason.widget.json', origin: 'https://other.example', hash: PIN, acknowledgedBy: 'alice', at: '2026-07-14T00:00:00.000Z' },
+    ];
+
+    it('permits no origin under the default off posture', () => {
+      expect(acknowledgedScriptSrc('off', registrations)).toEqual([]);
+    });
+
+    it('permits no origin under dev (its relaxation is delivered dev-only, elsewhere)', () => {
+      expect(acknowledgedScriptSrc('dev', registrations)).toEqual([]);
+    });
+
+    it('permits each registered origin, de-duplicated, only under acknowledged', () => {
+      const dupe: SideloadRegistration = {
+        url: 'https://widgets.internal.acme/other/gridmason.widget.json',
+        origin: 'https://widgets.internal.acme',
+        hash: PIN,
+        acknowledgedBy: 'alice',
+        at: '2026-07-14T00:00:00.000Z',
+      };
+      expect(acknowledgedScriptSrc('acknowledged', [...registrations, dupe])).toEqual([
+        'https://widgets.internal.acme',
+        'https://other.example',
+      ]);
+    });
+
+    it('permits nothing when acknowledged mode is on but no remote is registered', () => {
+      expect(acknowledgedScriptSrc('acknowledged', [])).toEqual([]);
     });
   });
 

@@ -29,10 +29,17 @@ import type { WidgetID } from '@gridmason/protocol';
 import { ApiAcknowledgedSideload, type AcknowledgedRemote } from './acknowledged-store';
 import { acknowledgedRemote } from './acknowledged-remotes';
 import { installAcknowledgedSideloadHost } from './host-seam';
+import { acknowledgedSideloadEnabled } from './policy';
 
 /** The acknowledged-sideload surface exposed to the add-widget picker. */
 export interface AcknowledgedSideloadSession {
-  /** The resolved, mountable acknowledged remotes (reactive). */
+  /**
+   * Whether the deploy's posture is `acknowledged` (SPEC §4). `off` (the default)
+   * and `dev` leave this `false`, and when it is `false` no registration is
+   * resolved, fetched, or installed — the gate the sideload-gate e2e drives.
+   */
+  readonly enabled: boolean;
+  /** The resolved, mountable acknowledged remotes (reactive). Always empty when `enabled` is `false`. */
   readonly remotes: readonly AcknowledgedRemote[];
   /** Re-read the persisted registrations from the API. */
   refresh(): Promise<void>;
@@ -65,6 +72,12 @@ export function useAcknowledgedSideload(): AcknowledgedSideloadSession {
 const DEMO_API_BASE = '';
 
 export function AcknowledgedSideloadProvider({ children }: { children: ReactNode }): React.JSX.Element {
+  // The deploy's sideload posture (build-time constant). When acknowledged mode is
+  // off — the default — this provider stays inert: it never fetches a registration,
+  // never resolves a remote, and installs nothing, so no acknowledged origin reaches
+  // the import map (SPEC §4 `off`; the invariant the sideload-gate e2e proves).
+  const enabled = acknowledgedSideloadEnabled();
+
   const adapterRef = useRef<ApiAcknowledgedSideload>(null);
   adapterRef.current ??= new ApiAcknowledgedSideload({ baseUrl: DEMO_API_BASE });
   const adapter = adapterRef.current;
@@ -87,6 +100,7 @@ export function AcknowledgedSideloadProvider({ children }: { children: ReactNode
   // the `HttpOnly` cookie and the first read succeeds. Failures are swallowed — the
   // dashboard renders without acknowledged remotes rather than blocking.
   useEffect(() => {
+    if (!enabled) return; // acknowledged mode off (default) → never fetch a registration
     let active = true;
     void (async () => {
       try {
@@ -99,12 +113,18 @@ export function AcknowledgedSideloadProvider({ children }: { children: ReactNode
     return () => {
       active = false;
     };
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   // Install the prod-safe seam the canvas render path reads. Re-installed whenever
   // the resolved remote set changes, so a just-registered remote is mountable and
   // badged without a reload.
   useEffect(() => {
+    if (!enabled) {
+      // Acknowledged mode off (default): install nothing, so the canvas render
+      // path sees no acknowledged remote in the import map (SPEC §4 `off`).
+      installAcknowledgedSideloadHost(null);
+      return;
+    }
     installAcknowledgedSideloadHost({
       remotes: () => remotes.map((remote) => acknowledgedRemote(remote)),
       describe: (id: WidgetID) => {
@@ -116,7 +136,7 @@ export function AcknowledgedSideloadProvider({ children }: { children: ReactNode
       widgetIdForInstance: (instanceId: string) => placementsRef.current?.get(instanceId),
     });
     return () => installAcknowledgedSideloadHost(null);
-  }, [remotes]);
+  }, [enabled, remotes]);
 
   const register = useCallback(
     async (url: string) => {
@@ -143,8 +163,8 @@ export function AcknowledgedSideloadProvider({ children }: { children: ReactNode
   }, []);
 
   const session = useMemo<AcknowledgedSideloadSession>(
-    () => ({ remotes, refresh, register, remove, loadModule, notePlacement }),
-    [remotes, refresh, register, remove, loadModule, notePlacement],
+    () => ({ enabled, remotes, refresh, register, remove, loadModule, notePlacement }),
+    [enabled, remotes, refresh, register, remove, loadModule, notePlacement],
   );
 
   return <AcknowledgedCtx.Provider value={session}>{children}</AcknowledgedCtx.Provider>;
