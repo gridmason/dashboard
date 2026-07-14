@@ -25,6 +25,12 @@ export interface GmPageCanvasElement extends HTMLElement {
    * Retry; an unresolved tag stays an anonymous card.
    */
   widgetDescriptor: WidgetDescriptor | undefined;
+  /**
+   * The mounted widget element for a placed instance id, or `undefined` when it
+   * is not mounted (unmounted, virtualized offscreen, or in its error state). The
+   * host reads it to assign each mount's per-instance interim SDK handle (FR-9).
+   */
+  widgetElement(instanceId: string): HTMLElement | undefined;
 }
 
 /** Attributes/props accepted on `<gm-page-canvas>` in JSX, including a typed `ref`. */
