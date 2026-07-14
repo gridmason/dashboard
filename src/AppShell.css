@@ -53,6 +53,52 @@
   background: var(--gm-card);
 }
 
+.gm-editflag {
+  font-family: var(--gm-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  padding: 4px 11px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--gm-copper);
+  white-space: nowrap;
+}
+
+.gm-btn {
+  font-family: var(--gm-font-mono);
+  font-size: 11px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 7px 13px;
+  border: 1px solid var(--gm-line);
+  border-radius: 6px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.gm-btn:hover:not(:disabled) {
+  border-color: var(--gm-copper);
+  color: var(--gm-copper);
+}
+
+.gm-btn-primary {
+  background: var(--gm-copper);
+  border-color: var(--gm-copper);
+  color: #fff;
+}
+
+.gm-btn-primary:hover:not(:disabled) {
+  color: #fff;
+}
+
+.gm-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
 .gm-themebtn {
   font-family: var(--gm-font-mono);
   font-size: 11px;

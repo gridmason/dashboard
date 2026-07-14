@@ -7,17 +7,16 @@ import {
   type CanvasRenderedDetail,
   type CanvasWidgetLifecycleDetail,
 } from '@gridmason/core/canvas';
-import { resolveLayout } from '@gridmason/core/engine';
 import type { LayoutPage, WidgetID } from '@gridmason/protocol';
 import 'gridstack/dist/gridstack.css';
 import './canvas-host.css';
 
 import type { PageRef } from '../routes';
-import type { GmPageCanvasElement } from './gm-page-canvas';
 import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
 import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
+import { useEditSession } from '../edit/edit-session';
 
 // Register `<gm-page-canvas>` once, at module load. In core 0.3.0 importing the
 // canvas module no longer defines the element as a side effect — `define()` is
@@ -50,12 +49,14 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
  * page-type-specific logic. Keeping this the sole render path is the "no
  * special-case pages" invariant later epics build page types on.
  *
- * It runs the Phase-A boot pipeline (SPEC §2) for the resolved {@link PageRef}:
- * resolve the page type → compose its default layout into an `EffectiveLayout`
- * (with the page type's locked slots) → lazily `import()` the referenced widget
- * modules from the local import map (registering their elements) → hand the
- * layout and typed context to core's `<gm-page-canvas>` through a ref. The
- * canvas is driven by properties, so the imperative ref is the seam, not JSX.
+ * Resolution and persistence live in the {@link useEditSession} provider: it signs
+ * in, composes the effective layout from the page-type default, any org layout,
+ * and the user's saved override (3-level resolution, SPEC §5), and owns edit mode.
+ * This host is the DOM half — it renders whatever {@link EffectiveLayout} the
+ * session publishes: for each new layout it lazily `import()`s the referenced
+ * widget modules (registering their elements) and hands the layout and typed
+ * context to core's `<gm-page-canvas>` through the session's ref. The canvas is
+ * driven by properties, so the imperative ref is the seam, not JSX.
  *
  * SPEC §2 mounts each widget "with context + saved props + **SDK handle**"; this
  * is where the **interim** handle is wired (FR-9, Phase A). Core 0.3.0's canvas
@@ -72,24 +73,21 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
  * widget ABI is unchanged either way.
  */
 export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
-  const ref = useRef<GmPageCanvasElement>(null);
+  const { canvasRef, effective } = useEditSession();
   // One interim-handle registry per canvas host: it owns this page's per-instance
   // handles and their stable identities across re-renders (`../host-sdk/registry`).
   const registryRef = useRef<InterimHandleRegistry>(null);
   registryRef.current ??= new InterimHandleRegistry();
 
   useEffect(() => {
-    const el = ref.current;
-    if (el === null) return;
+    const el = canvasRef.current;
+    if (el === null || effective === undefined) return;
     const registry = registryRef.current!;
-    // New page = all-new instances: drop the previous page's handles so a reused
-    // grid-item id mints a fresh identity rather than inheriting the old one.
+    // New layout = all-new instances: drop the previous render's handles so a
+    // reused grid-item id mints a fresh identity rather than inheriting the old one.
     registry.reset();
 
     const pageType = resolvePageType(page.pageType);
-    const effective = resolveLayout({
-      default: { layout: pageType.defaultLayout, locks: pageType.descriptor.locks },
-    });
     const pageContext = buildPageContext(pageType, page.entityId);
     el.context = pageContext;
     // Resolve a friendly display name for each widget's error-boundary fallback
@@ -148,7 +146,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // the shell never blocks on one widget's code).
     let active = true;
     void loadWidgetsForLayout(importMap, effective.layout).finally(() => {
-      if (!active || ref.current !== el) return;
+      if (!active || canvasRef.current !== el) return;
       el.layout = effective;
       // Relayout nudge: gridstack (core's canvas binding) sizes each item as a
       // percentage of the grid width, but the items it places on this first mount
@@ -158,7 +156,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       // full width without a lingering collapsed state. Idempotent and harmless;
       // remove once the core binding lays out correctly on mount (gridmason/core#63).
       requestAnimationFrame(() => {
-        if (active && ref.current === el) window.dispatchEvent(new Event('resize'));
+        if (active && canvasRef.current === el) window.dispatchEvent(new Event('resize'));
       });
     });
 
@@ -168,11 +166,11 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       el.removeEventListener(CANVAS_WIDGET_MOUNTED_EVENT, onWidgetMounted);
       registry.reset();
     };
-  }, [page.pageType, page.entityId]);
+  }, [canvasRef, effective, page.pageType, page.entityId]);
 
   return (
     <gm-page-canvas
-      ref={ref}
+      ref={canvasRef}
       aria-label={CANVAS_LABEL}
       data-page-type={page.pageType}
       {...(page.entityId !== undefined ? { 'data-entity-id': page.entityId } : {})}
