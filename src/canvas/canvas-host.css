@@ -1,0 +1,16 @@
+/*
+ * Page-canvas host layout. Core's `<gm-page-canvas>` is a custom element, which
+ * defaults to `display: inline` — that shrink-wraps its `.grid-stack` child and
+ * collapses gridstack's percentage-based column widths. Give the element block
+ * layout and full width so the 12-column grid spans the content area; gridstack's
+ * own stylesheet (imported by `CanvasHost`) handles item positioning within it.
+ */
+
+gm-page-canvas {
+  display: block;
+  inline-size: 100%;
+}
+
+gm-page-canvas .grid-stack {
+  inline-size: 100%;
+}
