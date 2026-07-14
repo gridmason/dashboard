@@ -30,7 +30,7 @@ import type { ReactNode } from 'react';
 import type { WidgetID } from '@gridmason/protocol';
 
 import { DevSideloadAllowlist, type DevSideloadRemote } from './allowlist-store';
-import { fetchDevWidgetManifest, normalizeOrigin } from './manifest';
+import { fetchDevManifest, normalizeOrigin } from './manifest';
 import { sideloadRemote } from './remotes';
 import { installSideloadHost } from './host-seam';
 // Imported as an inlined string (not a side-effect CSS import) and injected at
@@ -132,7 +132,7 @@ export function DevSideloadProvider({ children }: { children: ReactNode }): Reac
     async (origin: string): Promise<DevSideloadRemote> => {
       if (!acknowledged) throw new Error('acknowledge the dev-sideload risk first');
       const normalized = normalizeOrigin(origin);
-      const registration = await fetchDevWidgetManifest(normalized);
+      const registration = await fetchDevManifest(normalized);
       return store.register(registration);
     },
     [acknowledged, store],

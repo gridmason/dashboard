@@ -13,11 +13,13 @@
  * verifies against ({@link acknowledgedRemote}).
  *
  * **Prod-safe** (SPEC §4: acknowledged mode is available in production builds), so
- * nothing here is gated on `import.meta.env.DEV`. It reuses the shared widget
- * descriptor contract ({@link fetchWidgetManifest}) to learn a remote's tag + entry.
+ * nothing here is gated on `import.meta.env.DEV`. It reuses the generic widget
+ * descriptor contract ({@link fetchWidgetDescriptor}) to learn a remote's tag + entry
+ * — acknowledged remotes are arbitrary deployed hosts, not a `gridmason dev` server,
+ * so they use the descriptor contract rather than the dev `/@dev/manifest` endpoint.
  */
 import type { WidgetID } from '@gridmason/protocol';
-import { fetchDevWidgetManifest, normalizeOrigin } from './manifest';
+import { fetchWidgetDescriptor, normalizeOrigin } from './manifest';
 import { sideloadSource } from './source';
 import { sha256Pin } from './hash';
 
@@ -112,7 +114,7 @@ export class ApiAcknowledgedSideload {
   }
 
   async #resolve(registration: SideloadRegistration): Promise<AcknowledgedRemote> {
-    const manifest = await fetchDevWidgetManifest(registration.url, this.#fetch);
+    const manifest = await fetchWidgetDescriptor(registration.url, this.#fetch);
     return {
       url: registration.url,
       origin: registration.origin,
@@ -134,7 +136,7 @@ export class ApiAcknowledgedSideload {
    * bad URL, an unreachable remote, or a `403` (not an owner).
    */
   async register(url: string): Promise<SideloadRegistration> {
-    const manifest = await fetchDevWidgetManifest(url, this.#fetch);
+    const manifest = await fetchWidgetDescriptor(url, this.#fetch);
     const entryResponse = await this.#fetch(manifest.entryUrl);
     if (!entryResponse.ok) {
       throw new AcknowledgedSideloadError(

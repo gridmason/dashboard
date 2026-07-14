@@ -1,0 +1,28 @@
+{
+  "formatVersion": "1.0",
+  "tag": "demo-selfnote",
+  "kind": "widget",
+  "name": "selfnote",
+  "publisher": "demo",
+  "version": "0.1.0",
+  "entry": "src/entry.js",
+  "props": "props.schema.json",
+  "thumbnail": "thumbnail.svg",
+  "size": {
+    "default": [
+      4,
+      3
+    ]
+  },
+  "requiresContext": {
+    "primary": {
+      "recordType": "example"
+    }
+  },
+  "capabilities": [
+    {
+      "api": "records.read",
+      "scope": "recordType:example"
+    }
+  ]
+}
