@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { ReactNode } from 'react';
 import type { PageRef } from './routes';
 import { resolvePageType } from './pages/page-types';
+import { useEditSession } from './edit/edit-session';
 import './AppShell.css';
 
 /**
@@ -48,6 +49,7 @@ export function AppShell({
   children: ReactNode;
 }): React.JSX.Element {
   const [, setTheme] = useState<'light' | 'dark' | null>(null);
+  const { ready, canEdit, editing, dirty, enter, save, discard, resetToDefault } = useEditSession();
 
   return (
     <div className="gm-shell">
@@ -56,12 +58,43 @@ export function AppShell({
           <BrandMark />
           grid<span>mason</span>
         </div>
+        {editing ? <span className="gm-editflag">● Editing layout</span> : null}
         <span className="gm-crumb">
           page&nbsp;·&nbsp;<b>{page.pageType}</b>
           {page.entityId !== undefined ? <> · {page.entityId}</> : null}
         </span>
         <span className="gm-pill">context: {contextLabel(page.pageType)}</span>
         <div className="gm-spacer" />
+        {/* Edit toolbar (mockup 02-edit-mode.html). Save/Discard commit or drop the
+            staged edit; Reset deletes the user override so the page falls back to
+            the org/default layout. Hidden entirely on a page that forbids customization. */}
+        {editing ? (
+          <>
+            <button
+              type="button"
+              className="gm-btn"
+              onClick={() => void discard()}
+              disabled={!dirty}
+            >
+              Discard
+            </button>
+            <button type="button" className="gm-btn" onClick={() => void resetToDefault()}>
+              Reset to org default
+            </button>
+            <button
+              type="button"
+              className="gm-btn gm-btn-primary"
+              onClick={() => void save()}
+              disabled={!dirty}
+            >
+              Save layout
+            </button>
+          </>
+        ) : ready && canEdit ? (
+          <button type="button" className="gm-btn" onClick={enter}>
+            Edit layout
+          </button>
+        ) : null}
         <button
           type="button"
           className="gm-themebtn"

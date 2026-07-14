@@ -18,6 +18,14 @@ export interface GmPageCanvasElement extends HTMLElement {
   layout: EffectiveLayout | undefined;
   /** The typed page-context value, serialized to every widget's `context` attribute. */
   context: unknown;
+  /**
+   * Whether the canvas is in edit mode (gridstack drag/resize enabled). The
+   * edit-mode controller drives this; declared here so the element satisfies
+   * core's `EditableCanvas` when handed to an `EditController`.
+   */
+  editMode: boolean;
+  /** The active tab index for a tabbed layout (0 for a single-grid page). */
+  activeTab: number;
 }
 
 /** Attributes/props accepted on `<gm-page-canvas>` in JSX, including a typed `ref`. */
