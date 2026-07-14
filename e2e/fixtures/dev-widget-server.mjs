@@ -9,7 +9,11 @@
  *   GET  /src/entry.js   → ESM defining <acme-dev-note>         (the widget entry)
  *   GET  /@dev/events    → text/event-stream hot-reload signal  (SSE)
  *   GET  /content        → { text }                             (live content)
- *   POST /__bump         → re-serve: bump the content + emit an SSE `reload`
+ *   POST /__bump         → re-serve source: bump content + emit an SSE `reload`
+ *                          (`source`, generation bumped)
+ *   POST /__bump-data    → re-serve data: bump content + emit an SSE `reload`
+ *                          (`fixtures`, generation reused — a hot data swap)
+ *   GET  /__clients      → { count } connected SSE clients (test-sync helper)
  *
  * Unlike a real scaffolded widget (whose entry imports `@gridmason/sdk` by bare
  * specifier and so needs an import map the dashboard does not yet provide — see
@@ -17,10 +21,12 @@
  * it fetches `/content` on mount rather than importing anything, so it loads with
  * no shared scope and the hermetic e2e stays a pure test of the transport +
  * governance path. The author loop (re-serve → the running dashboard reflects the
- * change) is demonstrated by a new mount picking up the re-served content, because
- * a custom element cannot be re-`define`d. Every response carries `Access-Control-
- * Allow-Origin: *`, because a cross-origin ES-module `import()` and the content
- * `fetch` are both CORS requests.
+ * change **without a manual reload**, issue #41) is what the SSE stream drives: a
+ * `reload` frame makes the dashboard remount the mounted instance, and the fresh
+ * mount re-fetches `/content` — because a custom element cannot be re-`define`d, a
+ * remount (not a class swap) is the mechanism. Every response carries `Access-
+ * Control-Allow-Origin: *`, because a cross-origin ES-module `import()` and the
+ * content `fetch` are both CORS requests.
  */
 import { createServer } from 'node:http';
 
@@ -93,10 +99,22 @@ const server = createServer((req, res) => {
     req.on('close', () => sseClients.delete(res));
   } else if (url.pathname === '/content') {
     send(res, 200, JSON.stringify({ text: `Field Notes v${version}` }), 'application/json');
+  } else if (url.pathname === '/__clients') {
+    // Test-sync helper: the e2e waits for the dashboard's SSE stream to connect
+    // before it bumps, so the one-shot `reload` frame is never emitted into the void.
+    send(res, 200, JSON.stringify({ count: sseClients.size }), 'application/json');
   } else if (url.pathname === '/__bump' && req.method === 'POST') {
+    // A `src/` edit: bump the generation and announce a `source` reload.
     version += 1;
     generation += 1;
     const payload = JSON.stringify({ category: 'source', generation });
+    for (const client of sseClients) client.write(`event: reload\ndata: ${payload}\n\n`);
+    send(res, 200, JSON.stringify({ version, generation }), 'application/json');
+  } else if (url.pathname === '/__bump-data' && req.method === 'POST') {
+    // A fixture-data edit: content changes but the module graph does not, so the
+    // generation is reused and the category is `fixtures` (a hot data swap).
+    version += 1;
+    const payload = JSON.stringify({ category: 'fixtures', generation });
     for (const client of sseClients) client.write(`event: reload\ndata: ${payload}\n\n`);
     send(res, 200, JSON.stringify({ version, generation }), 'application/json');
   } else {

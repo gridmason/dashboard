@@ -32,7 +32,8 @@ import type { WidgetID } from '@gridmason/protocol';
 import { DevSideloadAllowlist, type DevSideloadRemote } from './allowlist-store';
 import { fetchDevManifest, normalizeOrigin } from './manifest';
 import { sideloadRemote } from './remotes';
-import { installSideloadHost } from './host-seam';
+import { installSideloadHost, publishDevReload } from './host-seam';
+import { DevReloadController, reloadNeedsReimport, type DevReloadFrame } from './dev-events';
 // Imported as an inlined string (not a side-effect CSS import) and injected at
 // runtime below, so the styles ride this dev-only module: a side-effect
 // `import './sideload.css'` would be bundled into the production CSS even though
@@ -76,6 +77,47 @@ export function useDevSideload(): DevSideloadSession {
   return session;
 }
 
+/**
+ * React to one `gridmason dev` `reload` frame for `origin` (FR-7, issue #41).
+ *
+ * For a `source`/`manifest` edit the entry is re-imported at a cache-busting
+ * `?v=<generation>` URL — this fetches the fresh module graph and surfaces a
+ * broken edit as a load error. It does **not** swap the element class: a
+ * custom-element tag cannot be redefined in a live document (cli
+ * docs/dev-server.md), so the old class stays registered and keeps running. What
+ * actually lands the change is the **remount** the published signal triggers on
+ * the canvas (`./remount`): re-running the widget's mount lifecycle re-reads
+ * whatever it reads on mount (the demo widget re-fetches its content). A
+ * `fixtures`/`context` edit skips the re-import and only remounts (a data swap).
+ * An `origin` no longer on the allowlist is ignored — a frame that raced its own
+ * removal.
+ */
+async function handleDevReload(
+  store: DevSideloadAllowlist,
+  origin: string,
+  frame: DevReloadFrame,
+): Promise<void> {
+  const remote = store.get(origin);
+  if (remote === undefined) return;
+  if (reloadNeedsReimport(frame.category)) {
+    try {
+      // `@vite-ignore`: the dev-server URL is only known at runtime (as in `remotes.ts`).
+      await import(/* @vite-ignore */ `${remote.entryUrl}?v=${frame.generation}`);
+    } catch (cause) {
+      // Best-effort: the previously-registered class keeps running; report the
+      // broken edit rather than failing the reload.
+      // eslint-disable-next-line no-console
+      console.warn(`[gridmason:dev-sideload] re-import of ${remote.entryUrl} failed`, cause);
+    }
+  }
+  publishDevReload({
+    origin,
+    tag: remote.tag,
+    category: frame.category,
+    generation: frame.generation,
+  });
+}
+
 export function DevSideloadProvider({ children }: { children: ReactNode }): React.JSX.Element {
   const storeRef = useRef<DevSideloadAllowlist>(null);
   storeRef.current ??= new DevSideloadAllowlist();
@@ -85,6 +127,16 @@ export function DevSideloadProvider({ children }: { children: ReactNode }): Reac
   // sideload widget before a Save re-resolves `effective` (which will then list it).
   const placementsRef = useRef<Map<string, WidgetID>>(null);
   placementsRef.current ??= new Map<string, WidgetID>();
+
+  // The dev-server hot-reload SSE transport (FR-7, issue #41): one EventSource per
+  // admitted origin. Held in a ref so its connections survive re-renders; the
+  // effects below keep it in step with the allowlist and tear it down on unmount.
+  const reloadRef = useRef<DevReloadController>(null);
+  reloadRef.current ??= new DevReloadController({
+    onReload: (origin, frame) => {
+      void handleDevReload(store, origin, frame);
+    },
+  });
 
   const [acknowledged, setAcknowledged] = useState(false);
 
@@ -119,6 +171,19 @@ export function DevSideloadProvider({ children }: { children: ReactNode }): Reac
     });
     return () => installSideloadHost(null);
   }, [store]);
+
+  // Keep the hot-reload streams in step with the admitted origins: a newly admitted
+  // origin opens a stream, a removed one closes it, and a revoked gate (which clears
+  // the whole allowlist) closes them all (FR-7 teardown — dev only).
+  useEffect(() => {
+    reloadRef.current?.setOrigins(remotes.map((remote) => remote.origin));
+  }, [remotes]);
+
+  // Tear every stream down when the provider unmounts.
+  useEffect(() => {
+    const controller = reloadRef.current;
+    return () => controller?.close();
+  }, []);
 
   const acknowledge = useCallback(() => setAcknowledged(true), []);
 
