@@ -35,8 +35,8 @@ import {
   useState,
 } from 'react';
 import type { ReactNode, RefObject } from 'react';
-import type { LayoutPage } from '@gridmason/protocol';
-import { EditController } from '@gridmason/core/canvas';
+import type { LayoutPage, LayoutWidget } from '@gridmason/protocol';
+import { EditController, type AddWidgetInput } from '@gridmason/core/canvas';
 import { resolveLayout, type EffectiveLayout, type ScopeKey } from '@gridmason/core/engine';
 
 import type { PageRef } from '../routes';
@@ -88,6 +88,15 @@ export interface EditSession {
   readonly canPublish: boolean;
   /** Enter edit mode. Inert if the page forbids customization. */
   enter(): void;
+  /**
+   * Place a new widget instance on the active grid (first-fit), staging the edit
+   * through the buffer like any other change (SPEC §2/§5) — Save persists it.
+   * Returns the created {@link LayoutWidget} (its generated `i` addresses the new
+   * instance), or `undefined` if no controller is bound (degraded/unresolved).
+   * The first consumer is the dev add-widget picker (D-E2.1); the general
+   * first-party picker rides the same action.
+   */
+  addWidget(input: AddWidgetInput): LayoutWidget | undefined;
   /** Persist the staged edit as the user's override, then leave edit mode (Save layout). */
   save(): Promise<void>;
   /** Drop the staged edit and re-render the last-persisted layout, then leave edit mode (Discard). */
@@ -268,6 +277,14 @@ export function EditSessionProvider({
     setEditing(controller.editing);
   }, []);
 
+  const addWidget = useCallback((input: AddWidgetInput): LayoutWidget | undefined => {
+    const controller = controllerRef.current;
+    if (controller === null) return undefined;
+    // The controller commits through the buffer (copy-on-write on first edit) and
+    // re-renders the canvas, so the new widget mounts live; Save flushes it.
+    return controller.addWidget(input);
+  }, []);
+
   const save = useCallback(async () => {
     const buffer = bufferRef.current;
     const adapter = adapterRef.current;
@@ -339,6 +356,7 @@ export function EditSessionProvider({
     userOverride,
     canPublish,
     enter,
+    addWidget,
     save,
     discard,
     resetToDefault,

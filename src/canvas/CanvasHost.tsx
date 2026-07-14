@@ -15,8 +15,11 @@ import type { PageRef } from '../routes';
 import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
 import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
+import type { LocalImportMap } from '../boot/import-map';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
+import { sideloadHost } from '../sideload/host-seam';
+import { isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
 
 // Register `<gm-page-canvas>` once, at module load. In core 0.3.0 importing the
 // canvas module no longer defines the element as a side effect — `define()` is
@@ -42,6 +45,36 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
     for (const item of grid.items) byInstance.set(item.i, item.widgetID);
   }
   return byInstance;
+}
+
+/**
+ * The active import map for a render: the shell's local remotes, plus — in a
+ * **development build** with the dev gate active — the admitted dev-sideload
+ * remotes (SPEC §4, FR-7), merged in by tag so a sideloaded widget rides the
+ * exact same lazy-`import()` mount path as a first-party one. In a production
+ * build `import.meta.env.DEV` is a static `false`, so this is the local map
+ * unchanged and the sideload seam is never even referenced.
+ */
+function activeImportMap(): LocalImportMap {
+  if (!import.meta.env.DEV) return importMap;
+  const host = sideloadHost();
+  if (host === null) return importMap;
+  const merged = new Map(importMap);
+  for (const remote of host.remotes()) merged.set(remote.tag, remote);
+  return merged;
+}
+
+/**
+ * Add the distinct sideload badge to a placed instance's grid item, once (SPEC §4:
+ * "every sideloaded widget is marked distinctly in the UI"; mockup 01 `.badge.side`).
+ * Idempotent — the render fires on every reconcile, so it guards on an existing badge.
+ */
+function markSideloadItem(item: HTMLElement | undefined): void {
+  if (item === undefined || item.querySelector(':scope > .gm-sideload-badge') !== null) return;
+  const badge = item.ownerDocument.createElement('span');
+  badge.className = 'gm-sideload-badge';
+  badge.textContent = SIDELOAD_BADGE_LABEL;
+  item.appendChild(badge);
 }
 
 /**
@@ -94,7 +127,14 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // card (SPEC §6/§8): a failed first-party widget (e.g. the crasher demo) shows
     // its name + Retry, while an unknown tag stays an anonymous card. The name
     // source is the widget registry (import map), so it lives beside `describeWidget`.
-    el.widgetDescriptor = describeWidget;
+    // In a dev build a sideloaded widget resolves its name through the seam too, so
+    // an admitted dev remote is named on its card rather than left anonymous. The
+    // seam is read **fresh** at call time (not captured): the dev provider is an
+    // ancestor, and a child's effect runs before its parent's, so the seam may not
+    // be installed yet when this effect first runs.
+    el.widgetDescriptor = (identity) =>
+      describeWidget(identity) ??
+      (import.meta.env.DEV ? sideloadHost()?.describe(identity.widgetID) : undefined);
 
     // The per-mount handle inputs shared across this page's widgets (SPEC §3: one
     // context for all widgets on a page). The interim handle serves the bound
@@ -104,12 +144,20 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     const handleContext = toPageContext(pageContext);
     const hostData = demoHostData(handleContext);
 
+    // The identity of a placed instance: from the resolved layout, or — for a
+    // sideload widget the dev picker just added this session (not yet in `effective`,
+    // which a reload would re-resolve) — from the seam's placement bridge (SPEC §4).
+    // Drives both the interim handle and the sideload badge.
+    const widgetIdOf = (instanceId: string): WidgetID | undefined =>
+      widgetIds.get(instanceId) ??
+      (import.meta.env.DEV ? sideloadHost()?.widgetIdForInstance(instanceId) : undefined);
+
     // Assign the per-instance interim SDK handle onto one mounted widget element.
     // `handleFor` mints on first sight of an instance and returns the same handle
     // thereafter (stable identity), so re-assigning on every render is idempotent.
     const assignHandle = (instanceId: string): void => {
       const element = el.widgetElement(instanceId);
-      const widgetId = widgetIds.get(instanceId);
+      const widgetId = widgetIdOf(instanceId);
       if (element === undefined || widgetId === undefined) return;
       const handle = registry.handleFor({
         mountKey: instanceId,
@@ -126,7 +174,26 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     const onRendered = (event: Event): void => {
       const placed = (event as CustomEvent<CanvasRenderedDetail>).detail.instanceIds;
       registry.reconcile(placed);
-      for (const instanceId of placed) assignHandle(instanceId);
+      for (const instanceId of placed) {
+        assignHandle(instanceId);
+        // Mark a sideloaded instance's card distinctly (SPEC §4). A first-party or
+        // registry widget is never a match and gets no badge. An instance is
+        // sideloaded if its resolved identity says so (persisted/re-resolved case),
+        // or — for a widget the picker just added, whose placement note lands only
+        // *after* this synchronous render — if its mounted element's tag is one an
+        // admitted dev remote defines. The seam is read fresh (see the descriptor note).
+        if (import.meta.env.DEV) {
+          const host = sideloadHost();
+          if (host !== null) {
+            const widgetId = widgetIdOf(instanceId);
+            const element = el.widgetElement(instanceId);
+            const sideloaded =
+              (widgetId !== undefined && isSideloadedId(widgetId)) ||
+              (element !== undefined && host.remotes().some((r) => r.tag === element.localName));
+            if (sideloaded) markSideloadItem(el.itemElement(instanceId));
+          }
+        }
+      }
     };
     // `gm:widget-mounted` fires when virtualization lazily mounts one widget
     // between full renders — assign its handle straight away (off in Phase A, but
@@ -145,7 +212,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // widgets get their fallback card while the rest of the page renders (SPEC §7:
     // the shell never blocks on one widget's code).
     let active = true;
-    void loadWidgetsForLayout(importMap, effective.layout).finally(() => {
+    void loadWidgetsForLayout(activeImportMap(), effective.layout).finally(() => {
       if (!active || canvasRef.current !== el) return;
       el.layout = effective;
       // Relayout nudge: gridstack (core's canvas binding) sizes each item as a
