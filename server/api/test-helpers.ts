@@ -10,6 +10,11 @@ import type { DemoConfig } from '../config/index';
 import { LayoutStore, type LayoutDoc } from '../layout-store/index';
 import { GovernanceStore } from '../governance-store/index';
 import { SideloadRegistrationStore } from '../sideload-store/index';
+import {
+  createScopedFetchService,
+  StaticInstanceCapabilityStore,
+  type UpstreamFetch,
+} from '../scoped-fetch/index';
 
 /** A two-user config matching the checked-in sample's shape. */
 export function makeConfig(): DemoConfig {
@@ -45,20 +50,33 @@ export interface TestServer {
   readonly store: LayoutStore;
   readonly governance: GovernanceStore;
   readonly sideload: SideloadRegistrationStore;
+  /** The scoped-fetch declared-capability resolver, for seeding a test instance's `net:<host>` grants. */
+  readonly capabilities: StaticInstanceCapabilityStore;
   close(): Promise<void>;
+}
+
+/** Options for {@link startTestServer} — inject a stub upstream so a proxy test never hits the network. */
+export interface TestServerOptions {
+  /** The scoped-fetch proxy's outbound fetch. Defaults to the global `fetch`. */
+  readonly upstream?: UpstreamFetch;
 }
 
 /**
  * Boot the demo API on an ephemeral port with in-memory stores. Returns the base
- * URL, the layout + governance + sideload stores (for direct assertions), and a
- * `close` teardown.
+ * URL, the layout + governance + sideload stores + scoped-fetch capability
+ * resolver (for direct assertions/seeding), and a `close` teardown.
  */
-export async function startTestServer(config: DemoConfig = makeConfig()): Promise<TestServer> {
+export async function startTestServer(
+  config: DemoConfig = makeConfig(),
+  options: TestServerOptions = {},
+): Promise<TestServer> {
   const store = new LayoutStore();
   const governance = new GovernanceStore();
   const sideload = new SideloadRegistrationStore();
   const auth = new AuthService(config);
-  const server = createApp({ config, store, governance, sideload, auth });
+  const capabilities = new StaticInstanceCapabilityStore();
+  const scopedFetch = createScopedFetchService(capabilities, options.upstream);
+  const server = createApp({ config, store, governance, sideload, auth, scopedFetch });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
@@ -66,6 +84,7 @@ export async function startTestServer(config: DemoConfig = makeConfig()): Promis
     store,
     governance,
     sideload,
+    capabilities,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
 }

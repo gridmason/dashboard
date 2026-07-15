@@ -3,6 +3,7 @@ import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { devSideloadCsp, isDevSideloadGateEnabled } from './vite/dev-sideload-csp';
 import { SIDELOAD_IMPORT_MAP, devSideloadImportScope } from './vite/dev-sideload-import-scope';
+import { productionCsp } from './vite/production-csp';
 
 // The demo API (server/) the persistence adapter talks to. Dev and preview both
 // proxy `/api` to it so the SPA and the API are same-origin — the `HttpOnly`
@@ -30,7 +31,10 @@ export default defineConfig({
   // sideloaded scaffold-template widget resolve its bare specifiers (issue #40).
   // Both are inert for `vite build`, so the production bundle carries neither the
   // CSP relaxation nor the import map (SPEC §4).
-  plugins: [react(), devSideloadCsp(), devSideloadImportScope()],
+  // `productionCsp` reports the enforced production policy (report-only) on the
+  // preview server so the e2e report-only run can validate it against the real
+  // built bundle; it is inert for `vite dev` and `vite build` (preview-only hook).
+  plugins: [react(), devSideloadCsp(), devSideloadImportScope(), productionCsp()],
   define: {
     __GM_SIDELOAD_MODE__: JSON.stringify(SIDELOAD_MODE),
   },
