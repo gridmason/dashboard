@@ -16,10 +16,12 @@ import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
 import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
 import type { LocalImportMap, LocalRemote } from '../boot/import-map';
+import { federatedHost } from '../boot/federated-host';
+import { useFederatedGeneration } from '../boot/FederatedBootProvider';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
 import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
-import { remountInstancesByTag } from '../sideload/remount';
+import { remountInstancesByTag, layoutWithoutInstances } from '../sideload/remount';
 import { ACKNOWLEDGED_BADGE_LABEL, isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
 // Acknowledged-sideload badge styling — prod-safe (acknowledged mode ships in
 // production builds), so it is a real side-effect CSS import here, unlike the
@@ -53,20 +55,24 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
 }
 
 /**
- * The active import map for a render: the shell's local remotes, plus the
- * acknowledged-sideload remotes (SPEC §4, FR-8 — prod-safe, merged on every build)
- * and, in a **development build** with the dev gate active, the admitted
- * dev-sideload remotes (FR-7). Every sideloaded remote is merged in by tag so it
- * rides the exact same lazy-`import()` mount path as a first-party one — an
- * acknowledged remote's loader additionally verifies its content hash before the
- * module runs ({@link acknowledgedRemote}). In a production build
+ * The active import map for a render: the shell's local remotes, plus the **verified
+ * federated** remotes (SPEC §2, FR-10 — prod-safe, resolved + verified by the
+ * federated boot), the acknowledged-sideload remotes (SPEC §4, FR-8 — prod-safe,
+ * merged on every build) and, in a **development build** with the dev gate active,
+ * the admitted dev-sideload remotes (FR-7). Every remote is merged in by tag so it
+ * rides the exact same lazy-`import()` mount path as a first-party one — a federated
+ * remote's `load` imports a URL whose release was verified before it entered the map
+ * ({@link federatedRemote}), and an acknowledged remote's loader verifies its content
+ * hash before the module runs ({@link acknowledgedRemote}). In a production build
  * `import.meta.env.DEV` is a static `false`, so the dev seam is never referenced.
  */
 function activeImportMap(): LocalImportMap {
+  const federated = federatedHost();
   const acknowledged = acknowledgedSideloadHost();
   const dev = import.meta.env.DEV ? sideloadHost() : null;
-  if (acknowledged === null && dev === null) return importMap;
+  if (federated === null && acknowledged === null && dev === null) return importMap;
   const merged = new Map(importMap);
+  if (federated !== null) for (const remote of federated.remotes()) merged.set(remote.tag, remote);
   if (acknowledged !== null) for (const remote of acknowledged.remotes()) merged.set(remote.tag, remote);
   if (dev !== null) for (const remote of dev.remotes()) merged.set(remote.tag, remote);
   return merged;
@@ -135,6 +141,11 @@ function matchSideloadRemote(
  */
 export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
   const { canvasRef, effective } = useEditSession();
+  // The federated-boot generation (FR-10): the async boot resolves + verifies remotes
+  // after the first render, so this token flips when verified federated remotes become
+  // installable. Read as an effect dependency below so the lazy-mount effect re-runs and
+  // upgrades a federated widget from its fallback card to its real element (no reload).
+  const federatedGeneration = useFederatedGeneration();
   // One interim-handle registry per canvas host: it owns this page's per-instance
   // handles and their stable identities across re-renders (`../host-sdk/registry`).
   const registryRef = useRef<InterimHandleRegistry>(null);
@@ -162,6 +173,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // be installed yet when this effect first runs.
     el.widgetDescriptor = (identity) =>
       describeWidget(identity) ??
+      federatedHost()?.describe(identity.widgetID) ??
       acknowledgedSideloadHost()?.describe(identity.widgetID) ??
       (import.meta.env.DEV ? sideloadHost()?.describe(identity.widgetID) : undefined);
 
@@ -196,6 +208,29 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
         ...(hostData !== undefined ? { hostData } : {}),
       });
       assignSdkHandle(element, handle);
+    };
+
+    // Force-unmount any of `instanceIds` a revocation verdict now kills (FR-12, #17):
+    // a federated instance already running when a feed marks its artifact `killed`
+    // (or fails its registry closed) must be dropped now. `applyRevocation` keeps a
+    // killed remote out of the map at boot, so this only fires for an instance that
+    // mounted under an earlier boot generation and was killed by a later verdict; the
+    // seam decides which, and withholding them from the layout unmounts them
+    // (`../sideload/remount`). Consulted on the full `gm:rendered` reconcile AND at
+    // lazy mount time (`gm:widget-mounted`), so a virtualized widget that mounts
+    // *after* the reconcile's kill sweep is still caught at its own mount — a killed
+    // instance never stays mounted regardless of timing.
+    const unmountKilled = (instanceIds: readonly string[]): void => {
+      const federated = federatedHost();
+      const current = el.layout;
+      if (federated === null || current === undefined) return;
+      const mountedFederated = instanceIds
+        .map((instanceId) => ({ instanceId, widgetID: widgetIdOf(instanceId) }))
+        .filter((m): m is { instanceId: string; widgetID: WidgetID } => m.widgetID !== undefined);
+      const killed = federated.killedInstanceIds(mountedFederated);
+      if (killed.length > 0) {
+        el.layout = layoutWithoutInstances(current, new Set(killed));
+      }
     };
 
     // `gm:rendered` fires after every render reconciles the grid (mounts settled).
@@ -233,12 +268,20 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
           }
         }
       }
+
+      // Revocation kills over the full placed set (FR-12, #17).
+      unmountKilled(placed);
     };
     // `gm:widget-mounted` fires when virtualization lazily mounts one widget
-    // between full renders — assign its handle straight away (off in Phase A, but
-    // this keeps the seam correct if a host enables `virtualize`).
+    // between full renders — assign its handle straight away, then consult the kill
+    // set for *this* instance so a widget that mounts after the reconcile's kill
+    // sweep (e.g. scrolled into view) is force-unmounted at its own mount rather than
+    // lingering until the next full render (off in Phase A, but this keeps the seam
+    // correct if a host enables `virtualize`).
     const onWidgetMounted = (event: Event): void => {
-      assignHandle((event as CustomEvent<CanvasWidgetLifecycleDetail>).detail.instanceId);
+      const { instanceId } = (event as CustomEvent<CanvasWidgetLifecycleDetail>).detail;
+      assignHandle(instanceId);
+      unmountKilled([instanceId]);
     };
     el.addEventListener(CANVAS_RENDERED_EVENT, onRendered);
     el.addEventListener(CANVAS_WIDGET_MOUNTED_EVENT, onWidgetMounted);
@@ -262,7 +305,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       el.removeEventListener(CANVAS_WIDGET_MOUNTED_EVENT, onWidgetMounted);
       registry.reset();
     };
-  }, [canvasRef, effective, page.pageType, page.entityId]);
+  }, [canvasRef, effective, page.pageType, page.entityId, federatedGeneration]);
 
   // Dev hot-reload (SPEC §4, FR-7, issue #41): when an admitted `gridmason dev`
   // origin re-serves its widget, the dev provider re-imports the entry and
