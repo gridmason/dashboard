@@ -18,6 +18,7 @@
  *   GET    /api/sideload                                (auth)   list acknowledged registrations
  *   POST   /api/sideload                                (admin)  register a hash-pinned remote by URL
  *   DELETE /api/sideload?url=<encoded>                  (admin)  deregister a remote
+ *   POST   /api/scoped-fetch                            (auth)   proxy a net:<host> call, host re-checked server-side
  *
  * Publishing (and un-publishing) an org layout, and registering (or deregistering)
  * an acknowledged-sideload remote, are the privileged actions — gated on the
@@ -44,6 +45,12 @@ import {
   type SideloadRegistrationStore,
 } from './sideload-store/index';
 import {
+  INSTANCE_TOKEN_HEADER,
+  parseScopedFetchRequest,
+  runScopedFetch,
+  type ScopedFetchService,
+} from './scoped-fetch/index';
+import {
   BadRequestError,
   clearSessionCookie,
   parseCookies,
@@ -67,6 +74,8 @@ export interface AppDeps {
   readonly governance: GovernanceStore;
   readonly sideload: SideloadRegistrationStore;
   readonly auth: AuthService;
+  /** The scoped-fetch proxy's collaborators (declared-capability resolver + outbound fetch). */
+  readonly scopedFetch: ScopedFetchService;
 }
 
 /** Build the demo API server. The returned server is not yet listening. */
@@ -111,6 +120,11 @@ async function handle(deps: AppDeps, req: IncomingMessage, res: ServerResponse):
 
   if (segments[1] === 'sideload') {
     await handleSideload(deps, req, res, method, segments.slice(2), url);
+    return;
+  }
+
+  if (segments[1] === 'scoped-fetch') {
+    await handleScopedFetch(deps, req, res, method, segments.slice(2));
     return;
   }
 
@@ -355,6 +369,67 @@ async function handleSideload(
   }
 
   sendJson(res, 405, { error: 'method_not_allowed' });
+}
+
+/**
+ * The scoped-fetch proxy (SPEC §3, FR-13): the one network path a `net:<host>`
+ * widget is allowed. The browser cannot reach a third-party host directly
+ * (`connect-src` forbids it), so its `net.fetch` arrives here — same-origin — and
+ * the proxy **re-checks the declared host allowlist server-side** before forwarding.
+ *
+ * The route is gated on a session (a signed-in page), then on the per-instance
+ * token the SDK transport attaches: {@link runScopedFetch} resolves the declared
+ * capabilities from it and denies a host no capability grants. **Instance-token
+ * minting/validation is the parallel token rail (#21)** — this handler reads the
+ * token header and hands it to the resolver seam; #21 backs the resolver and adds
+ * the audit trail without changing the re-check.
+ */
+async function handleScopedFetch(
+  deps: AppDeps,
+  req: IncomingMessage,
+  res: ServerResponse,
+  method: string,
+  rest: readonly string[],
+): Promise<void> {
+  const user = requireAuth(deps, req, res);
+  if (user === undefined) return;
+
+  if (rest.length !== 0) {
+    sendJson(res, 404, { error: 'not_found' });
+    return;
+  }
+  if (method !== 'POST') {
+    sendJson(res, 405, { error: 'method_not_allowed' });
+    return;
+  }
+
+  let body: Record<string, unknown>;
+  try {
+    body = await readJsonBody(req);
+  } catch (err) {
+    sendJson(res, 400, { error: err instanceof BadRequestError ? err.message : 'bad_request' });
+    return;
+  }
+  const parsed = parseScopedFetchRequest(body);
+  if (!parsed.ok) {
+    sendJson(res, 400, { error: parsed.error });
+    return;
+  }
+
+  const token = headerValue(req, INSTANCE_TOKEN_HEADER);
+  const outcome = await runScopedFetch(deps.scopedFetch, token, parsed.value);
+  if (!outcome.ok) {
+    sendJson(res, outcome.status, { error: outcome.error });
+    return;
+  }
+  sendJson(res, 200, outcome.response);
+}
+
+/** Read a request header as a single string (arrays are joined; absent → `undefined`). */
+function headerValue(req: IncomingMessage, name: string): string | undefined {
+  const value = req.headers[name];
+  if (value === undefined) return undefined;
+  return Array.isArray(value) ? value.join(', ') : value;
 }
 
 /**
