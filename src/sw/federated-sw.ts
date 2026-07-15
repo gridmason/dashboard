@@ -20,10 +20,12 @@
  * persisted table can only *lack* a new URL — which is then refused as unclaimed
  * until the page re-hands-off — never serve wrong bytes. Fail closed either way.
  *
- * **Scope.** This SW is FR-11 only (hash verification of federated remotes). The
- * session-token rail (FR-14, #21) augments this same shell-owned worker later; the
- * fetch handler here passes through everything outside federated territory untouched,
- * leaving that surface free.
+ * **Scope.** This worker is both FR-11 (hash verification of federated remotes) and
+ * the FR-14 **session-token rail**: it holds the shell's session token (handed by
+ * `postMessage`, `../boot/sw/session-token`) and attaches it as `authorization` to
+ * every outbound same-origin API call — the token never readable by page/widget JS.
+ * When no token is held the fetch handler stays transparent to `/api`, so the two
+ * responsibilities are independent and the verification path is unchanged.
  *
  * Built as a standalone ES-module entry emitted to the app root (`/federated-sw.js`,
  * vite.config.ts) so it can claim scope `/`. Not exercised by Vitest (no SW globals
@@ -38,6 +40,11 @@ import {
   type EnforcementAckMessage,
 } from '../boot/sw/enforcement-table';
 import { verifyBytes } from '../boot/sw/verify-fetch';
+import {
+  isSameOriginApiRequest,
+  isSessionTokenMessage,
+  SessionTokenHolder,
+} from '../boot/sw/session-token';
 
 // Minimal, local typings for the SW globals this file uses. The project tsconfig
 // ships the DOM lib (for the app), which does not declare `ServiceWorkerGlobalScope`
@@ -72,6 +79,31 @@ const TABLE_KEY = 'https://gm-sw.internal/enforcement-table';
 
 /** The active enforcement table. Replaced wholesale on each page hand-off; hydrated from cache on restart. */
 let table = new EnforcementTable();
+
+/**
+ * The shell-held session token (FR-14). In-memory only — never persisted (unlike
+ * the enforcement table), so a restarted worker holds nothing until the page
+ * re-hands it (fail closed: attach no credential rather than a stale one). Page/
+ * widget JS holds no reference to it — the token lives only in this SW closure and
+ * leaves only as the `authorization` header {@link SessionTokenHolder.stamp} adds.
+ */
+const sessionToken = new SessionTokenHolder();
+
+/**
+ * Reissue a same-origin API request with the shell-held session credential attached
+ * (FR-14). Only reached when a token is held; the SDK's own per-instance token
+ * (`x-gridmason-instance-token`, set page-side) rides through untouched.
+ */
+async function attachSessionAuth(request: Request): Promise<Response> {
+  const current: Record<string, string> = {};
+  request.headers.forEach((value, name) => {
+    current[name] = value;
+  });
+  const stamped = sessionToken.stamp(current);
+  const headers = new Headers();
+  for (const [name, value] of Object.entries(stamped)) headers.set(name, value);
+  return fetch(new Request(request, { headers }));
+}
 
 /** Persist the current table so a restarted worker re-hydrates it (fail closed on restart). */
 async function persist(current: EnforcementTable): Promise<void> {
@@ -149,6 +181,13 @@ sw.addEventListener('activate', (event) => {
 });
 
 sw.addEventListener('message', (event) => {
+  // FR-14 session-token hand-off: the page hands (or clears) the credential the SW
+  // holds and attaches to outbound API calls. In-memory only; not acknowledged.
+  if (isSessionTokenMessage(event.data)) {
+    if (event.data.token === null) sessionToken.clear();
+    else sessionToken.remember(event.data.token);
+    return;
+  }
   if (!isEnforcementMessage(event.data)) return;
   table = tableFromMessage(event.data);
   const ack: EnforcementAckMessage = { type: ENFORCEMENT_ACK_TYPE, size: table.size };
@@ -164,6 +203,14 @@ sw.addEventListener('message', (event) => {
 });
 
 sw.addEventListener('fetch', (event) => {
+  // FR-14: attach the shell-held session credential to same-origin API calls. Only
+  // when a token is held — otherwise the SW stays transparent to `/api` (the demo's
+  // `HttpOnly` session cookie continues to authenticate unchanged). The per-instance
+  // identity token rides its own header, set by the SDK transport, untouched here.
+  if (sessionToken.has() && isSameOriginApiRequest(event.request.url, location.origin)) {
+    event.respondWith(attachSessionAuth(event.request));
+    return;
+  }
   const decision = table.classify(event.request.url);
   switch (decision.kind) {
     case 'passthrough':

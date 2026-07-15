@@ -16,7 +16,8 @@ import { loadConfig } from './config/index';
 import { LayoutStore } from './layout-store/index';
 import { GovernanceStore } from './governance-store/index';
 import { SideloadRegistrationStore } from './sideload-store/index';
-import { createScopedFetchService, StaticInstanceCapabilityStore } from './scoped-fetch/index';
+import { InstanceTokenRegistry } from './sdk-identity/index';
+import { createScopedFetchService } from './scoped-fetch/index';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const LAYOUT_STORE_PATH =
@@ -35,13 +36,17 @@ const store = new LayoutStore({ filePath: LAYOUT_STORE_PATH });
 const governance = new GovernanceStore({ filePath: GOVERNANCE_STORE_PATH });
 const sideload = new SideloadRegistrationStore({ filePath: SIDELOAD_STORE_PATH });
 const auth = new AuthService(config);
-// The scoped-fetch proxy's declared-capability resolver. Seeded **empty** here:
-// with no per-instance token minted yet (that is the token rail, #21), the proxy
-// resolves no capabilities and denies every net:<host> call — fail closed. #21
-// swaps this backing for its mint/validation without touching the proxy re-check.
-const scopedFetch = createScopedFetchService(new StaticInstanceCapabilityStore());
+const identity = new InstanceTokenRegistry();
+// The scoped-fetch proxy's declared-capability resolver is now backed by the
+// instance-token rail (#21/FR-14): a registered token resolves to the widget's
+// declared capabilities, so scoped-fetch re-checks a `net:<host>` call against the
+// same rail that gates records — a token the rail does not know resolves to none
+// and is denied (fail closed). runScopedFetch's re-check is untouched.
+const scopedFetch = createScopedFetchService({
+  resolve: (token) => identity.resolve(token)?.declaredCapabilities,
+});
 
-const server = createApp({ config, store, governance, sideload, auth, scopedFetch });
+const server = createApp({ config, store, governance, sideload, auth, identity, scopedFetch });
 server.listen(PORT, () => {
   process.stdout.write(`[demo-api] listening on http://localhost:${PORT}\n`);
 });

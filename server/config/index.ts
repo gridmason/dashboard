@@ -29,6 +29,14 @@ export interface DemoUser {
   readonly displayName?: string;
   /** Role stubs for the permissions adapter (enforcement is Phase B, SPEC §6). */
   readonly roles?: readonly string[];
+  /**
+   * The user's granted capabilities in string form (`records.read:recordType:customer`,
+   * `net:api.acme.com`, …) — the `user` side of the `min(user, widget)` gate the
+   * reference API enforces on capability-scoped calls (SPEC §3, §6, FR-14). The
+   * reference permissions stub: a real host derives these from its own RBAC. Omitted
+   * = the user grants no capability (every capability-gated call by them is denied).
+   */
+  readonly capabilities?: readonly string[];
 }
 
 /**
@@ -187,6 +195,12 @@ function validateUser(user: unknown, index: number, path: string): void {
     const { roles } = user;
     if (!Array.isArray(roles) || roles.some((r) => typeof r !== 'string')) {
       throw new ConfigError(path, `${at}.roles must be an array of strings`);
+    }
+  }
+  if ('capabilities' in user) {
+    const { capabilities } = user;
+    if (!Array.isArray(capabilities) || capabilities.some((c) => typeof c !== 'string')) {
+      throw new ConfigError(path, `${at}.capabilities must be an array of strings`);
     }
   }
 }

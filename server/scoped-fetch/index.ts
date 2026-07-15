@@ -32,13 +32,17 @@
  */
 import type { Capability } from '@gridmason/protocol';
 import { grantsCapability } from '@gridmason/protocol';
+import { INSTANCE_TOKEN_HEADER } from '@gridmason/sdk';
 
 /**
  * The header the SDK transport attaches the unforgeable per-instance token on
- * (SPEC §3). The proxy reads it to resolve the caller's declared capabilities; it
- * is **never** forwarded to the upstream host.
+ * (SPEC §3) — the **one** pinned `@gridmason/sdk` contract constant
+ * (`x-gridmason-instance-token`), re-exported so the proxy reads the exact slot
+ * the SDK identity stamper writes (a divergent literal would silently drop every
+ * token). The proxy reads it to resolve the caller's declared capabilities; it is
+ * **never** forwarded to the upstream host.
  */
-export const INSTANCE_TOKEN_HEADER = 'x-gm-instance-token';
+export { INSTANCE_TOKEN_HEADER };
 
 /**
  * A scoped outbound request the proxy accepts — the wire form of the SDK's
