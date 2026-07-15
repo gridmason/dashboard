@@ -8,7 +8,7 @@ The permanent, **product-neutral** dashboard app over [`@gridmason/core`](https:
 
 Built in React + TypeScript with Vite. Single-tenant pre-1.0. Engineering spec: [`docs/SPEC.md`](docs/SPEC.md); build plan: [`docs/specs/dashboard-v0/spec.md`](docs/specs/dashboard-v0/spec.md).
 
-> **Status: static boot (D-E1).** Every route mounts core's `<gm-page-canvas>` (`@gridmason/core@0.3.0`) through the no-special-case-pages invariant (below) and renders one of four demo page types from a **local import map** — the Phase-A stand-in for federated boot (no registry). Page types are data ([`src/pages/page-types.ts`](src/pages/page-types.ts)); widgets are a Phase-A placeholder ([`src/widgets/placeholder.ts`](src/widgets/placeholder.ts)) that the first-party demo widgets replace in a later epic. See [issue #5](https://github.com/gridmason/dashboard/issues/5).
+> **Status: static boot (D-E1).** Every route mounts core's `<gm-page-canvas>` (the `@gridmason/*` versions pinned in [`package.json`](package.json)) through the no-special-case-pages invariant (below) and renders one of four demo page types from a **local import map** — the Phase-A stand-in for federated boot (no registry). Page types are data ([`src/pages/page-types.ts`](src/pages/page-types.ts)); widgets are a Phase-A placeholder ([`src/widgets/placeholder.ts`](src/widgets/placeholder.ts)) that the first-party demo widgets replace in a later epic. See [issue #5](https://github.com/gridmason/dashboard/issues/5).
 
 ## The one invariant
 
@@ -54,6 +54,66 @@ The dashboard **publishes nothing to npm** (FR-17). It releases as two artifacts
 
 - a **deployable app image** (`Dockerfile` — the static bundle behind nginx), and
 - a **static bundle** (`dist/`) for any static host.
+
+## Deploy
+
+The dashboard is a static single-page app; deploying it means serving the built
+bundle with an SPA fallback (unknown paths resolve to `index.html`) and, ideally,
+the production security headers.
+
+### Docker (bundle behind nginx)
+
+The `Dockerfile` builds the bundle and serves it with nginx; the container
+listens on port **80** (`docker/nginx.conf`), which also emits the enforced
+production Content-Security-Policy (`docs/csp.md`).
+
+```bash
+docker build -t gridmason-dashboard .
+docker run -p 8080:80 gridmason-dashboard
+# → http://localhost:8080
+```
+
+### Static host (raw `dist/`)
+
+For any static host or CDN, build the bundle and serve `dist/`:
+
+```bash
+npm run build      # → dist/
+```
+
+Two requirements the host must meet:
+
+- **SPA fallback.** Client-routed paths (`/p/:pageType/:entityId`) must fall back
+  to `index.html`, exactly as `docker/nginx.conf`'s `try_files … /index.html`
+  does. Configure your host's equivalent rewrite.
+- **Security headers.** `docker/nginx.conf` is the reference for the
+  `Content-Security-Policy` (and `frame-ancestors`) the app expects. A host that
+  can set response headers should serve the same policy; one that cannot can
+  render most of it as a `<meta>` tag, with the caveats in
+  [`docs/csp.md`](docs/csp.md#static-hosting-without-header-control).
+
+The demo API (`server/`) is a separate optional process, not part of the static
+bundle — run it alongside the app if you want the reference persistence backend
+(see [Demo API](#demo-api-reference-adapters) below for its env knobs).
+
+### Connecting a registry
+
+Federated boot — resolving and verifying widget remotes from a live Gridmason
+Registry — is **Phase B** (SPEC milestone M2, epic D-E3) and is not wired in this
+Phase-A build; the dashboard currently renders demo page types from a local
+import map, not a registry. See the build plan
+([`docs/specs/dashboard-v0/spec.md`](docs/specs/dashboard-v0/spec.md)) for status.
+
+What a deployment can configure **today** is the CSP surface for a registry it
+intends to federate. The production policy is self-only by default; a deployment
+that will resolve remotes from a registry appends that registry's trusted CDN
+origin(s) to `script-src` and `connect-src` (the verifying Service Worker reads
+signed content from there). For the `vite preview` report-only validation server,
+set `GRIDMASON_REGISTRY_ORIGINS` (comma- or space-separated) and those origins
+are folded into the reported policy; for the production nginx image, add the same
+origins to the header in `docker/nginx.conf`. The full mechanism, including
+acknowledged-sideload origins and connect-only origins, is documented in
+[`docs/csp.md`](docs/csp.md#federating-a-registry).
 
 ## Demo API (reference adapters)
 
