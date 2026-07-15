@@ -14,13 +14,16 @@
   --gm-paper-2: #eef0f3;
   --gm-ink: #181b20;
   --gm-ink-soft: #5b636e;
-  --gm-copper: #c2691f;
+  /* Copper doubles as an accent fill and a text/link colour, so it must clear
+     WCAG AA 4.5:1 both as text on the light surfaces and under white button
+     text — keep it no lighter than this (the mockup's #c2691f fell short). */
+  --gm-copper: #9e5313;
   --gm-amber: #d0842f;
   --gm-line: #e3e6ea;
   --gm-card: #ffffff;
   --gm-code: #f2f4f6;
   --gm-ok: #2f855a;
-  --gm-warn: #c2691f;
+  --gm-warn: #9e5313;
 
   --gm-radius: 10px;
   --gm-font-sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
