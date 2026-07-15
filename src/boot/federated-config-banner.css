@@ -1,0 +1,35 @@
+/*
+ * Federated-config error banner — theme tokens only (../theme/tokens.css), so it
+ * re-themes with the shell. A loud, top-of-page alert for a malformed deployment
+ * `federated.json` (SPEC §4.4 fail-loud): the app still renders its local widgets
+ * below, but the operator is told federation did not come up and why.
+ */
+.gm-fedconfig-error {
+  display: flex;
+  gap: 10px;
+  align-items: baseline;
+  padding: 10px 22px;
+  border-bottom: 1px solid var(--gm-line);
+  background: var(--gm-code);
+  color: var(--gm-ink);
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.gm-fedconfig-error__tag {
+  flex: none;
+  font-family: var(--gm-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: #fff;
+  background: var(--gm-warn);
+  white-space: nowrap;
+}
+
+.gm-fedconfig-error__detail {
+  font-family: var(--gm-font-mono);
+  word-break: break-word;
+}

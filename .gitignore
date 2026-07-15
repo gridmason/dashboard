@@ -5,6 +5,10 @@ node_modules/
 dist/
 *.tsbuildinfo
 
+# local deployment federated-boot config a reviewer drops in to point dev at a
+# local registry (docs/examples/federated.json is the committed template)
+public/federated.json
+
 # demo API local persistence (file-backed layout store)
 server/.data/
 e2e/.data/
