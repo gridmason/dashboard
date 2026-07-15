@@ -295,7 +295,9 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
       'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
     });
 
-    // No feedVerifier: the default denies the feed → registry fails closed.
+    // No feedVerifier: the default is the real protocol primitive bound to
+    // config.trust.countersignRoots. The fixture feed is not authenticated by those
+    // roots, so verifyRevocationFeed refuses it → registry fails closed.
     const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, now: () => NOW });
     expect(result.remotes).toEqual([]);
     expect(result.verdicts.get(REGISTRY)?.failClosed).toBe(true);

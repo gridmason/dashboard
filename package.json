@@ -25,7 +25,7 @@
   },
   "dependencies": {
     "@gridmason/core": "0.5.2",
-    "@gridmason/protocol": "0.3.0",
+    "@gridmason/protocol": "0.4.0",
     "@gridmason/sdk": "0.4.0",
     "react": "19.2.7",
     "react-dom": "19.2.7",
@@ -44,6 +44,6 @@
     "vitest": "4.1.10"
   },
   "overrides": {
-    "@gridmason/protocol": "0.3.0"
+    "@gridmason/protocol": "0.4.0"
   }
 }

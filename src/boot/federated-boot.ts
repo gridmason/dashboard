@@ -59,6 +59,7 @@ import {
 } from './federated-config';
 import {
   RevocationFeedClient,
+  protocolFeedVerifier,
   type CursorStore,
   type FeedSignatureVerifier,
   type RegistryRevocationVerdict,
@@ -99,11 +100,12 @@ export interface FederatedBootDeps extends VerifyDeps, FederatedRemoteDeps {
   /** `fetch` used for the resolution and revocation-feed calls. Defaults to the global. */
   readonly fetchImpl?: typeof fetch;
   /**
-   * Verifies the revocation feed's detached signature (../boot/revocation-feed). The
-   * host wires this (WebCrypto over the canonical feed bytes, pinned countersign
-   * root) — `@gridmason/protocol@0.3.0` ships no public feed-signature primitive. If
-   * omitted, the feed is treated as unverifiable and the registry **fails closed**
-   * (no federated remote loads): a real deployment must supply a verifier.
+   * Verifies the revocation feed's detached signature (../boot/revocation-feed).
+   * Defaults to {@link protocolFeedVerifier} — `@gridmason/protocol@0.4.0`'s
+   * `verifyRevocationFeed` bound to this config's `trust.countersignRoots` (the same
+   * countersign roots release verification pins). Override only to inject an
+   * alternative verifier (tests). With the default and no roots pinned the feed is
+   * untrusted and the registry **fails closed** (no federated remote loads).
    */
   readonly feedVerifier?: FeedSignatureVerifier;
   /** Per-registry revocation cursor store (rollback protection). Defaults to a fresh in-memory store. */
@@ -111,13 +113,6 @@ export interface FederatedBootDeps extends VerifyDeps, FederatedRemoteDeps {
   /** Abort signal, so a slow boot can be cancelled on teardown. */
   readonly signal?: AbortSignal;
 }
-
-/**
- * The fail-closed default feed verifier: with no verifier wired, the feed cannot be
- * trusted, so the registry fails closed (SPEC §2 — a gate that cannot consume its
- * feed refuses the registry's remotes rather than admit unverified ones).
- */
-const denyUnverifiedFeed: FeedSignatureVerifier = () => false;
 
 /** A fresh empty result — a deployment with nothing federated enabled (own Maps, never shared). */
 function emptyResult(): FederatedBootResult {
@@ -170,7 +165,7 @@ export async function bootFederated(
   // failed closed — never enters the import map (SPEC §2). The verdicts are also
   // returned so the mount path can `resolveKills` an already-running instance.
   const feedClient = new RevocationFeedClient({
-    verifier: deps.feedVerifier ?? denyUnverifiedFeed,
+    verifier: deps.feedVerifier ?? protocolFeedVerifier(config.trust.countersignRoots),
     ...(deps.cursors !== undefined ? { cursors: deps.cursors } : {}),
     ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
     ...(deps.now !== undefined ? { now: deps.now } : {}),

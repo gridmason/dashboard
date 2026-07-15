@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import type { RevocationEntry } from '@gridmason/protocol';
 import {
   InMemoryCursorStore,
+  protocolFeedVerifier,
   RevocationFeedClient,
   type FeedSignatureVerifier,
   type RegistryFeedEndpoint,
@@ -193,6 +194,30 @@ describe('RevocationFeedClient.checkRegistry (SPEC §2, FR-12, registry SPEC §6
     const client = new RevocationFeedClient({ verifier: YES, fetchImpl, now: () => NOW });
 
     expect((await client.checkRegistry(endpoint())).status).toBe('malformed');
+  });
+});
+
+describe('protocolFeedVerifier — default backing over @gridmason/protocol@0.4.0 verifyRevocationFeed', () => {
+  // The real primitive drives these — no injected seam. A properly authenticated
+  // feed needs a leaf cert issued by a pinned countersign root (proven at 100%
+  // coverage in the protocol package); here we assert the security-critical
+  // direction end to end: with no matching root the detached signature cannot be
+  // authenticated, so the deployment fails closed.
+  it('fails closed (false) when no countersign roots are pinned', async () => {
+    const verify = protocolFeedVerifier([]);
+    await expect(verify(signedFeed({ entries: [entry()] }))).resolves.toBe(false);
+  });
+
+  it('fails closed (false) when the feed signature is not issued by a pinned root', async () => {
+    const verify = protocolFeedVerifier([new Uint8Array([1, 2, 3])]);
+    await expect(verify(signedFeed())).resolves.toBe(false);
+  });
+
+  it('resolves a boolean rather than throwing on an unauthenticated feed (stable-reason contract)', async () => {
+    const verify = protocolFeedVerifier([]);
+    const result = verify(signedFeed());
+    expect(result).toBeInstanceOf(Promise);
+    await expect(result).resolves.toBe(false);
   });
 });
 
