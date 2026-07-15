@@ -6,10 +6,20 @@
  * ```
  * buildGateSnapshot   (../boot/gate-snapshot)        which remotes are enabled
  *   → resolveGateSnapshot (../boot/resolution-client)   POST /v1/resolve → fragment
+ *   → RevocationFeedClient.checkAll (../boot/revocation-feed)   per-registry kill verdict
+ *   → applyRevocation (../boot/revocation-gate)                drop revoked/killed/fail-closed
  *   → assembleFederatedImportMap (../boot/import-map-assembly)  absolute-URL map + bundles
- *   → verifyAssembledModules (../boot/release-verification)     verify each release
+ *   → verifyAssembledModules (../boot/release-verification)     verify each surviving release
  *   → federatedRemote (../boot/federated-remote)               verified → mountable remote
  * ```
+ *
+ * The revocation feed (FR-12, #17) is consumed **before** assembly so a
+ * revoked/killed remote — or every remote of a registry whose feed failed closed —
+ * never enters the map (SPEC §2, the gate is the kill switch). A killed remote thus
+ * drops without a redeploy the moment the feed lists it. The complementary
+ * `resolveKills` hook (force-unmounting an **already-running** instance a later feed
+ * kills) is exposed through the federated-host seam and consumed by the mount path
+ * (../boot/FederatedBootProvider, ../canvas/CanvasHost).
  *
  * The result is everything the render path and the D-E4 Service Worker need:
  * - `remotes` — the **verified** modules as mountable {@link LocalRemote}s (a
@@ -36,7 +46,7 @@ import type { ExcludedModule } from '@gridmason/protocol';
 import type { MultihashString } from '@gridmason/protocol/verify';
 import { buildGateSnapshot } from './gate-snapshot';
 import { resolveGateSnapshot } from './resolution-client';
-import { assembleFederatedImportMap } from './import-map-assembly';
+import { assembleFederatedImportMap, type ResolvedRegistry } from './import-map-assembly';
 import {
   verifyAssembledModules,
   type RefusedModule,
@@ -47,6 +57,13 @@ import {
   validateFederatedRegistryConfig,
   type FederatedRegistryConfig,
 } from './federated-config';
+import {
+  RevocationFeedClient,
+  type CursorStore,
+  type FeedSignatureVerifier,
+  type RegistryRevocationVerdict,
+} from './revocation-feed';
+import { applyRevocation, type RefusedRemote } from './revocation-gate';
 import type { LocalRemote } from './import-map';
 
 /**
@@ -65,19 +82,42 @@ export interface FederatedBootResult {
   readonly urlHashes: ReadonlyMap<string, MultihashString>;
   /** Modules refused by verification (for refusal cards); never in {@link imports} or {@link remotes}. */
   readonly refused: readonly RefusedModule[];
+  /** Remotes dropped by the revocation feed before assembly (revoked/killed/fail-closed), for their cards. */
+  readonly revoked: readonly RefusedRemote[];
   /** Modules the registry could not resolve (for fallback cards); reasons carried from the fragment. */
   readonly excluded: readonly ExcludedModule[];
   /** Verified tag → display name, for the render path's boundary descriptor. */
   readonly names: ReadonlyMap<string, string>;
+  /** Verified tag → exact resolved version — lets the mount path match a live instance to a kill entry. */
+  readonly versions: ReadonlyMap<string, string>;
+  /** The per-registry revocation verdicts, for the mount path's `resolveKills` (force-unmount) hook. */
+  readonly verdicts: ReadonlyMap<string, RegistryRevocationVerdict>;
 }
 
 /** Injectable collaborators for {@link bootFederated} — defaulted for production, overridden in tests. */
 export interface FederatedBootDeps extends VerifyDeps, FederatedRemoteDeps {
-  /** `fetch` used for the resolution call. Defaults to the global. */
+  /** `fetch` used for the resolution and revocation-feed calls. Defaults to the global. */
   readonly fetchImpl?: typeof fetch;
+  /**
+   * Verifies the revocation feed's detached signature (../boot/revocation-feed). The
+   * host wires this (WebCrypto over the canonical feed bytes, pinned countersign
+   * root) — `@gridmason/protocol@0.3.0` ships no public feed-signature primitive. If
+   * omitted, the feed is treated as unverifiable and the registry **fails closed**
+   * (no federated remote loads): a real deployment must supply a verifier.
+   */
+  readonly feedVerifier?: FeedSignatureVerifier;
+  /** Per-registry revocation cursor store (rollback protection). Defaults to a fresh in-memory store. */
+  readonly cursors?: CursorStore;
   /** Abort signal, so a slow boot can be cancelled on teardown. */
   readonly signal?: AbortSignal;
 }
+
+/**
+ * The fail-closed default feed verifier: with no verifier wired, the feed cannot be
+ * trusted, so the registry fails closed (SPEC §2 — a gate that cannot consume its
+ * feed refuses the registry's remotes rather than admit unverified ones).
+ */
+const denyUnverifiedFeed: FeedSignatureVerifier = () => false;
 
 /** A fresh empty result — a deployment with nothing federated enabled (own Maps, never shared). */
 function emptyResult(): FederatedBootResult {
@@ -87,8 +127,11 @@ function emptyResult(): FederatedBootResult {
     scopes: {},
     urlHashes: new Map(),
     refused: [],
+    revoked: [],
     excluded: [],
     names: new Map(),
+    versions: new Map(),
+    verdicts: new Map(),
   };
 }
 
@@ -122,9 +165,33 @@ export async function bootFederated(
     ...(deps.signal !== undefined ? { signal: deps.signal } : {}),
   });
 
-  const assembled = assembleFederatedImportMap({ imports: {} }, [
-    { fragment, servingOrigin: config.servingOrigin },
+  // Consume the registry's signed revocation & kill feed (FR-12, #17) BEFORE
+  // assembly, so a revoked/killed remote — or every remote of a registry whose feed
+  // failed closed — never enters the import map (SPEC §2). The verdicts are also
+  // returned so the mount path can `resolveKills` an already-running instance.
+  const feedClient = new RevocationFeedClient({
+    verifier: deps.feedVerifier ?? denyUnverifiedFeed,
+    ...(deps.cursors !== undefined ? { cursors: deps.cursors } : {}),
+    ...(deps.fetchImpl !== undefined ? { fetchImpl: deps.fetchImpl } : {}),
+    ...(deps.now !== undefined ? { now: deps.now } : {}),
+  });
+  const verdicts = await feedClient.checkAll([
+    {
+      registryId: config.gate.registry,
+      feedUrl: config.feedUrl,
+      ...(deps.signal !== undefined ? { signal: deps.signal } : {}),
+    },
   ]);
+
+  const resolvedRegistries: ResolvedRegistry[] = [
+    { fragment, servingOrigin: config.servingOrigin },
+  ];
+  const { registries: safeRegistries, refused: revoked } = applyRevocation(
+    resolvedRegistries,
+    verdicts,
+  );
+
+  const assembled = assembleFederatedImportMap({ imports: {} }, safeRegistries);
 
   const { verified, refused } = await verifyAssembledModules(assembled.modules, config.trust, {
     ...(deps.verify !== undefined ? { verify: deps.verify } : {}),
@@ -160,6 +227,18 @@ export async function bootFederated(
     }),
   );
   const names = new Map(verified.map((v) => [v.module.tag, v.module.tag]));
+  const versions = new Map(verified.map((v) => [v.module.tag, v.module.version]));
 
-  return { remotes, imports, scopes, urlHashes, refused, excluded: assembled.excluded, names };
+  return {
+    remotes,
+    imports,
+    scopes,
+    urlHashes,
+    refused,
+    revoked,
+    excluded: assembled.excluded,
+    names,
+    versions,
+    verdicts,
+  };
 }

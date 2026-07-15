@@ -21,7 +21,7 @@ import { useFederatedGeneration } from '../boot/FederatedBootProvider';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
 import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
-import { remountInstancesByTag } from '../sideload/remount';
+import { remountInstancesByTag, layoutWithoutInstances } from '../sideload/remount';
 import { ACKNOWLEDGED_BADGE_LABEL, isSideloadedId, SIDELOAD_BADGE_LABEL } from '../sideload/source';
 // Acknowledged-sideload badge styling — prod-safe (acknowledged mode ships in
 // production builds), so it is a real side-effect CSS import here, unlike the
@@ -243,6 +243,24 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
               (element !== undefined && host.remotes().some((r) => r.tag === element.localName));
             if (sideloaded) markSideloadItem(el.itemElement(instanceId), 'gm-sideload-badge', SIDELOAD_BADGE_LABEL);
           }
+        }
+      }
+
+      // Revocation kills (FR-12, #17): a federated instance already running when a
+      // feed marks its artifact `killed` (or fails its registry closed) is
+      // force-unmounted now. `applyRevocation` keeps a killed remote out of the map
+      // at boot, so this only fires for an instance that mounted under an earlier
+      // boot generation and was killed by a later verdict; the seam decides which,
+      // and withholding them from the layout unmounts them (`../sideload/remount`).
+      const federated = federatedHost();
+      const current = el.layout;
+      if (federated !== null && current !== undefined) {
+        const mountedFederated = placed
+          .map((instanceId) => ({ instanceId, widgetID: widgetIdOf(instanceId) }))
+          .filter((m): m is { instanceId: string; widgetID: WidgetID } => m.widgetID !== undefined);
+        const killed = federated.killedInstanceIds(mountedFederated);
+        if (killed.length > 0) {
+          el.layout = layoutWithoutInstances(current, new Set(killed));
         }
       }
     };

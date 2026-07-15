@@ -6,7 +6,10 @@ import { FederatedConfigError, type FederatedRegistryConfig, type FederatedTrust
 
 const REGISTRY = 'registry.gridmason.dev';
 const ENDPOINT = 'https://registry.gridmason.dev/v1/resolve';
+const FEED_URL = 'https://registry.gridmason.dev/v1/revocation/feed';
 const SERVING = 'https://cdn.gridmason.dev';
+/** A fixed clock the feed fixtures are fresh against. */
+const NOW = 1_000;
 
 /** The absolute entry URL the assembler composes from the serving origin + root-relative path. */
 function absUrl(hash: string): string {
@@ -49,7 +52,23 @@ function config(modules: FederatedRegistryConfig['gate']['modules']): FederatedR
     gate: { registry: REGISTRY, modules },
     resolveEndpoint: ENDPOINT,
     servingOrigin: SERVING,
+    feedUrl: FEED_URL,
     trust: trust(),
+  };
+}
+
+/** A fresh, signed revocation feed blocking the given artifacts (empty = nothing blocked). */
+function signedFeed(entries: ReadonlyArray<{ artifact: string; state: 'revoked' | 'killed' }> = []): unknown {
+  return {
+    feed: {
+      formatVersion: '1.0',
+      registryId: REGISTRY,
+      seq: 0,
+      issuedAt: NOW,
+      ttlSeconds: 3600,
+      entries: entries.map((e) => ({ ...e, severity: 'high', reason: 'test' })),
+    },
+    signature: { alg: 'ES256', cert: 'cert', sig: 'sig' },
   };
 }
 
@@ -57,14 +76,23 @@ function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
 }
 
-function stubFetch(fragment: ImportMapFragment): { fetch: typeof globalThis.fetch; calls: string[] } {
+/** A fetch that routes the resolve POST to the fragment and the feed GET to the signed feed. */
+function stubFetch(
+  fragment: ImportMapFragment,
+  feed: unknown = signedFeed(),
+): { fetch: typeof globalThis.fetch; calls: string[] } {
   const calls: string[] = [];
   const fetchImpl = ((input: RequestInfo | URL) => {
-    calls.push(String(input));
+    const url = String(input);
+    calls.push(url);
+    if (url === FEED_URL) return Promise.resolve(jsonResponse(feed));
     return Promise.resolve(jsonResponse(fragment));
   }) as typeof globalThis.fetch;
   return { fetch: fetchImpl, calls };
 }
+
+/** Boot deps that let a fresh feed through — a passing verifier + the matching clock. */
+const FEED_OK = { feedVerifier: () => true, now: () => NOW } as const;
 
 /** A verify that succeeds for the named artifacts (returning their url→hash table) and refuses the rest. */
 function makeVerify(pass: Record<string, Map<string, MultihashString>>): typeof verifyRelease {
@@ -104,10 +132,11 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
     const urlHashes = new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]);
     const verify = makeVerify({ 'acme-chart@1.0.0': urlHashes });
 
-    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, importModule });
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, importModule, ...FEED_OK });
 
-    // Resolution hit the configured endpoint.
-    expect(calls).toEqual([ENDPOINT]);
+    // Resolution hit the resolve endpoint and the revocation feed was consumed.
+    expect(calls).toContain(ENDPOINT);
+    expect(calls).toContain(FEED_URL);
     // The verified module became a mountable remote with an absolute-URL loader.
     expect(result.remotes.map((r) => r.tag)).toEqual(['acme-chart']);
     expect(result.imports).toEqual({ [`${REGISTRY}/acme-chart`]: absUrl('aaa') });
@@ -138,7 +167,7 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
       'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
     });
 
-    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify });
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, ...FEED_OK });
 
     expect(result.remotes.map((r) => r.tag)).toEqual(['acme-chart']);
     expect(result.imports).toEqual({ [`${REGISTRY}/acme-chart`]: absUrl('aaa') });
@@ -164,7 +193,7 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
       'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
     });
 
-    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify });
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, ...FEED_OK });
     expect(result.scopes).toEqual({ [absUrl('aaa')]: { react: '/vendor/react-18.js' } });
   });
 
@@ -177,7 +206,7 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
       excluded: [{ publisher: 'acme', tag: 'acme-gone', version: '9.9.9', reason: 'not_distributable' }],
     };
     const { fetch } = stubFetch(fragment);
-    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify: makeVerify({}) });
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify: makeVerify({}), ...FEED_OK });
 
     expect(result.remotes).toEqual([]);
     expect(result.excluded).toEqual([
@@ -191,5 +220,84 @@ describe('bootFederated (SPEC §2; FR-10)', () => {
       bootFederated({ ...config(GATE_MODULES), resolveEndpoint: 'not-a-url' }, { fetchImpl: fetch }),
     ).rejects.toBeInstanceOf(FederatedConfigError);
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('drops a killed artifact named in the feed before it is even verified (FR-12)', async () => {
+    const fragment: ImportMapFragment = {
+      registry: REGISTRY,
+      imports: {
+        [`${REGISTRY}/acme-chart`]: '/v1/artifacts/sha2-256:aaa',
+        [`${REGISTRY}/acme-evil`]: '/v1/artifacts/sha2-256:bbb',
+      },
+      scopes: {},
+      modules: [fragmentModule('acme-chart', 'aaa'), fragmentModule('acme-evil', 'bbb')],
+      excluded: [],
+    };
+    // The feed kills acme-evil; the fetch routes it to the feed GET.
+    const { fetch } = stubFetch(fragment, signedFeed([{ artifact: 'acme-evil', state: 'killed' }]));
+    // verify would pass BOTH — the point is acme-evil is dropped by revocation first, so
+    // it never reaches verify and never becomes a remote.
+    const verify = makeVerify({
+      'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
+      'acme-evil@1.0.0': new Map<string, MultihashString>([[absUrl('bbb'), 'sha2-256:bbb' as MultihashString]]),
+    });
+
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, ...FEED_OK });
+
+    expect(result.remotes.map((r) => r.tag)).toEqual(['acme-chart']);
+    expect(result.imports).toEqual({ [`${REGISTRY}/acme-chart`]: absUrl('aaa') });
+    expect(result.revoked.map((r) => ({ tag: r.tag, reason: r.reason }))).toEqual([
+      { tag: 'acme-evil', reason: 'killed' },
+    ]);
+    // The verdict for the registry is fresh and carried for the mount path's kill hook.
+    expect(result.verdicts.get(REGISTRY)?.status).toBe('fresh');
+  });
+
+  it('fails the whole registry closed when the feed does not verify', async () => {
+    const fragment: ImportMapFragment = {
+      registry: REGISTRY,
+      imports: { [`${REGISTRY}/acme-chart`]: '/v1/artifacts/sha2-256:aaa' },
+      scopes: {},
+      modules: [fragmentModule('acme-chart', 'aaa')],
+      excluded: [],
+    };
+    const { fetch } = stubFetch(fragment);
+    const verify = makeVerify({
+      'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
+    });
+
+    // A rejecting feed verifier fails this registry closed — no remote loads, even
+    // though the release itself would verify.
+    const result = await bootFederated(config(GATE_MODULES), {
+      fetchImpl: fetch,
+      verify,
+      feedVerifier: () => false,
+      now: () => NOW,
+    });
+
+    expect(result.remotes).toEqual([]);
+    expect(result.imports).toEqual({});
+    expect(result.revoked.map((r) => r.reason)).toEqual(['registry-fail-closed']);
+    expect(result.verdicts.get(REGISTRY)?.failClosed).toBe(true);
+    expect(result.verdicts.get(REGISTRY)?.status).toBe('unverified');
+  });
+
+  it('fails the registry closed with no feed verifier wired (safe default)', async () => {
+    const fragment: ImportMapFragment = {
+      registry: REGISTRY,
+      imports: { [`${REGISTRY}/acme-chart`]: '/v1/artifacts/sha2-256:aaa' },
+      scopes: {},
+      modules: [fragmentModule('acme-chart', 'aaa')],
+      excluded: [],
+    };
+    const { fetch } = stubFetch(fragment);
+    const verify = makeVerify({
+      'acme-chart@1.0.0': new Map<string, MultihashString>([[absUrl('aaa'), 'sha2-256:aaa' as MultihashString]]),
+    });
+
+    // No feedVerifier: the default denies the feed → registry fails closed.
+    const result = await bootFederated(config(GATE_MODULES), { fetchImpl: fetch, verify, now: () => NOW });
+    expect(result.remotes).toEqual([]);
+    expect(result.verdicts.get(REGISTRY)?.failClosed).toBe(true);
   });
 });

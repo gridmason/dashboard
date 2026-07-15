@@ -19,6 +19,7 @@
  */
 import type { WidgetID } from '@gridmason/protocol';
 import type { LocalRemote } from './import-map';
+import type { MountedFederatedInstance } from './federated-kills';
 
 /** What the federated-boot provider exposes to the canvas render path. */
 export interface FederatedHost {
@@ -26,6 +27,13 @@ export interface FederatedHost {
   remotes(): readonly LocalRemote[];
   /** A display name for a verified federated widget identity (its card name), or `undefined`. */
   describe(id: WidgetID): string | undefined;
+  /**
+   * The subset of `mounted` instance ids that must be **force-unmounted** now under
+   * the current revocation verdicts (FR-12) — a running instance whose artifact a
+   * feed marked `killed`, or whose registry failed closed. The render path passes
+   * its mounted instances and unmounts whatever this returns (../boot/federated-kills).
+   */
+  killedInstanceIds(mounted: readonly MountedFederatedInstance[]): readonly string[];
 }
 
 let installed: FederatedHost | null = null;

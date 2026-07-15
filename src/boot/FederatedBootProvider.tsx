@@ -33,6 +33,7 @@ import type { WidgetID } from '@gridmason/protocol';
 
 import { bootFederated, type FederatedBootDeps, type FederatedBootResult } from './federated-boot';
 import { installFederatedHost } from './federated-host';
+import { federatedKilledInstanceIds } from './federated-kills';
 import type { FederatedRegistryConfig } from './federated-config';
 
 /**
@@ -98,6 +99,8 @@ export function FederatedBootProvider({
           );
           return match?.name;
         },
+        killedInstanceIds: (mounted) =>
+          federatedKilledInstanceIds(mounted, result.verdicts, result.versions),
       });
       // Signal the render path that verified remotes are now installable.
       setGeneration((g) => g + 1);

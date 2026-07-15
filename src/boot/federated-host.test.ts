@@ -19,6 +19,7 @@ function host(remotes: readonly LocalRemote[]): FederatedHost {
   return {
     remotes: () => remotes,
     describe: (id: WidgetID) => remotes.find((r) => r.source === id.source && r.tag === id.tag)?.name,
+    killedInstanceIds: () => [],
   };
 }
 

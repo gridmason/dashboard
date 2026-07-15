@@ -24,6 +24,7 @@ function config(overrides: Partial<FederatedRegistryConfig> = {}): FederatedRegi
     gate: { registry: 'registry.gridmason.dev', modules: [] },
     resolveEndpoint: 'https://registry.gridmason.dev/v1/resolve',
     servingOrigin: 'https://cdn.gridmason.dev',
+    feedUrl: 'https://registry.gridmason.dev/v1/revocation/feed',
     trust: trust(),
     ...overrides,
   };
@@ -56,6 +57,12 @@ describe('validateFederatedRegistryConfig (FR-10; GW-D21)', () => {
     expect(() =>
       validateFederatedRegistryConfig(config({ servingOrigin: 'ftp://cdn.example' })),
     ).toThrow(/servingOrigin.*http\(s\)/);
+  });
+
+  it('rejects a non-absolute revocation feed URL', () => {
+    expect(() => validateFederatedRegistryConfig(config({ feedUrl: '/v1/revocation/feed' }))).toThrow(
+      /feedUrl.*absolute URL/,
+    );
   });
 
   it('rejects a missing trust object', () => {

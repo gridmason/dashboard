@@ -79,6 +79,13 @@ export interface FederatedRegistryConfig {
    */
   readonly resolveEndpoint: string;
   /**
+   * The absolute `GET /v1/revocation/feed` URL of this registry's signed revocation
+   * & kill feed (registry SPEC §6). The federated boot consumes it before assembling
+   * the map so a revoked/killed remote never enters it (SPEC §2, FR-12); a feed that
+   * is stale, unreachable, unverifiable, or absent fails **this registry** closed.
+   */
+  readonly feedUrl: string;
+  /**
    * The absolute hash-addressed serving origin this registry's artifacts are
    * pinned to (e.g. `https://cdn.gridmason.dev`). The fragment's root-relative
    * `/v1/artifacts/:hash` URLs are composed against it into the absolute URLs the
@@ -114,6 +121,7 @@ export function validateFederatedRegistryConfig(config: FederatedRegistryConfig)
   }
   requireAbsoluteUrl(config.resolveEndpoint, 'resolveEndpoint');
   requireAbsoluteUrl(config.servingOrigin, 'servingOrigin');
+  requireAbsoluteUrl(config.feedUrl, 'feedUrl');
   validateTrust(config.trust);
 }
 
