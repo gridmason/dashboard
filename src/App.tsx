@@ -7,6 +7,7 @@ import { GovernanceView } from './governance/GovernanceView';
 import { ROUTES, resolvePageRef } from './routes';
 import { DevSideloadProvider } from './sideload';
 import { AcknowledgedSideloadProvider } from './sideload/AcknowledgedSideloadContext';
+import { FederatedBootProvider } from './boot/FederatedBootProvider';
 
 /**
  * Resolve raw route params to a page ref and render the single canvas host
@@ -33,9 +34,13 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
  * keeps unknown paths on the canvas host (resolving the default page type)
  * rather than dead-ending — the app always renders a canvas.
  *
- * The whole app is wrapped in the **acknowledged**-sideload session (SPEC §4,
- * FR-8), which is prod-safe — acknowledged mode is available in production builds —
- * so it is mounted on every build. In a **development build only** the router is
+ * The whole app is wrapped in the **federated-boot** provider (SPEC §2, FR-10),
+ * which resolves + verifies a configured registry's remotes and exposes the verified
+ * ones to the canvas — inert (installs nothing) until a deployment configures a
+ * registry, so it is a no-op on the default showcase. Inside it, the app is wrapped
+ * in the **acknowledged**-sideload session (SPEC §4, FR-8), which is prod-safe —
+ * acknowledged mode is available in production builds — so it is mounted on every
+ * build. In a **development build only** the router is
  * additionally wrapped in the **dev**-sideload session (FR-7): `import.meta.env.DEV`
  * is a static `false` in a production build, so `<DevSideloadProvider>` is dead
  * code there and drops the entire dev `./sideload` subtree from the bundle — dev
@@ -44,20 +49,22 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
  */
 export function App(): React.JSX.Element {
   return (
-    <AcknowledgedSideloadProvider>
-      {withDevSideload(
-        <Switch>
-          <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
-          <Route path={ROUTES.pageEntity}>
-            {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
-          </Route>
-          <Route path={ROUTES.page}>
-            {(params) => <PageView pageType={params.pageType} />}
-          </Route>
-          <Route>{() => <PageView />}</Route>
-        </Switch>,
-      )}
-    </AcknowledgedSideloadProvider>
+    <FederatedBootProvider>
+      <AcknowledgedSideloadProvider>
+        {withDevSideload(
+          <Switch>
+            <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
+            <Route path={ROUTES.pageEntity}>
+              {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
+            </Route>
+            <Route path={ROUTES.page}>
+              {(params) => <PageView pageType={params.pageType} />}
+            </Route>
+            <Route>{() => <PageView />}</Route>
+          </Switch>,
+        )}
+      </AcknowledgedSideloadProvider>
+    </FederatedBootProvider>
   );
 }
 
