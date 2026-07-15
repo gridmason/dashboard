@@ -9,8 +9,10 @@
  *
  * This is the **Phase-A** assembly: **local remotes only**. Every entry points
  * at a module bundled with the shell (a `local` source, `@gridmason/protocol`
- * identity.ts) — the five first-party demo widgets (clock, markdown,
- * record-summary, chart, crasher) that exercise the whole widget ABI (SPEC §5).
+ * identity.ts) — the six first-party demo widgets (clock, markdown,
+ * record-summary, chart, crasher, laggard) that exercise the whole widget ABI
+ * (SPEC §5) — the crasher proving the error boundary and the laggard the
+ * latency-budget auto-degrade (FR-15).
  * Phase B (D-E3) merges the enabled registries' resolved remotes into the same
  * map — their entries carry verified CDN URLs and ride the Service-Worker fetch
  * path — and injects the merged map as a real `<script type="importmap">`.
@@ -25,7 +27,7 @@ import type { LayoutPage, WidgetID } from '@gridmason/protocol';
 export { LOCAL_SOURCE };
 
 /**
- * The custom-element tags of the five first-party demo widgets (SPEC §5). Declared
+ * The custom-element tags of the six first-party demo widgets (SPEC §5). Declared
  * here — DOM-free — so the page-type config, this map, and each widget module
  * agree on one spelling **without** this module statically importing widget code:
  * a widget imports its own tag from here, and the map reaches the widget only
@@ -38,6 +40,7 @@ export const WIDGET_TAGS = {
   recordSummary: 'gm-record-summary-widget',
   chart: 'gm-chart-widget',
   crasher: 'gm-crasher-widget',
+  laggard: 'gm-laggard-widget',
 } as const;
 
 /**
@@ -82,7 +85,7 @@ function localRemote(tag: string, name: string, load: () => Promise<unknown>): L
 }
 
 /**
- * The Phase-A local remotes: the five first-party demo widgets. Each `load` thunk
+ * The Phase-A local remotes: the six first-party demo widgets. Each `load` thunk
  * is where — and the only place — a DOM-touching widget module is imported, so
  * importing *this* module (e.g. from the page-type config, under Node in unit
  * tests) never evaluates widget code.
@@ -93,6 +96,7 @@ const LOCAL_REMOTES: readonly LocalRemote[] = [
   localRemote(WIDGET_TAGS.recordSummary, 'Record summary', () => import('../widgets/record-summary/record-summary')),
   localRemote(WIDGET_TAGS.chart, 'Chart', () => import('../widgets/chart/chart')),
   localRemote(WIDGET_TAGS.crasher, 'Crasher', () => import('../widgets/crasher/crasher')),
+  localRemote(WIDGET_TAGS.laggard, 'Slow widget', () => import('../widgets/laggard/laggard')),
 ];
 
 /** Widget tag → display name, for the boundary descriptor (built once from the remotes). */

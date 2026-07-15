@@ -1,7 +1,9 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { devSideloadCsp, isDevSideloadGateEnabled } from './vite/dev-sideload-csp';
 import { SIDELOAD_IMPORT_MAP, devSideloadImportScope } from './vite/dev-sideload-import-scope';
+import { productionCsp } from './vite/production-csp';
 
 // The demo API (server/) the persistence adapter talks to. Dev and preview both
 // proxy `/api` to it so the SPA and the API are same-origin — the `HttpOnly`
@@ -29,7 +31,10 @@ export default defineConfig({
   // sideloaded scaffold-template widget resolve its bare specifiers (issue #40).
   // Both are inert for `vite build`, so the production bundle carries neither the
   // CSP relaxation nor the import map (SPEC §4).
-  plugins: [react(), devSideloadCsp(), devSideloadImportScope()],
+  // `productionCsp` reports the enforced production policy (report-only) on the
+  // preview server so the e2e report-only run can validate it against the real
+  // built bundle; it is inert for `vite dev` and `vite build` (preview-only hook).
+  plugins: [react(), devSideloadCsp(), devSideloadImportScope(), productionCsp()],
   define: {
     __GM_SIDELOAD_MODE__: JSON.stringify(SIDELOAD_MODE),
   },
@@ -50,6 +55,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // The shell-owned verifying Service Worker (FR-11, src/sw/federated-sw.ts) is a
+    // second entry emitted to the bundle **root** as `federated-sw.js` (not under
+    // assetsDir), so it is served from `/federated-sw.js` and can register with scope
+    // `/` — a nested `/assets/…` path would be scoped to `/assets/` and never control
+    // the app. Every other chunk keeps Vite's default hashed `assets/[name]-[hash]`.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        'federated-sw': fileURLToPath(new URL('./src/sw/federated-sw.ts', import.meta.url)),
+      },
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name === 'federated-sw' ? 'federated-sw.js' : 'assets/[name]-[hash].js',
+      },
+    },
   },
   server: {
     port: 5173,

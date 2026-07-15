@@ -18,7 +18,12 @@ import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot
 import type { LocalImportMap, LocalRemote } from '../boot/import-map';
 import { federatedHost } from '../boot/federated-host';
 import { useFederatedGeneration } from '../boot/FederatedBootProvider';
-import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
+import { ReferenceHostRegistry, toPageContext, demoDeclaredCapabilities } from '../host-sdk';
+import {
+  DashboardTelemetry,
+  resolveExporters,
+  WIDGET_LATENCY_BUDGET_MS,
+} from '../adapters/telemetry';
 import { useEditSession } from '../edit/edit-session';
 import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
 import { remountInstancesByTag, layoutWithoutInstances } from '../sideload/remount';
@@ -126,18 +131,19 @@ function matchSideloadRemote(
  * driven by properties, so the imperative ref is the seam, not JSX.
  *
  * SPEC §2 mounts each widget "with context + saved props + **SDK handle**"; this
- * is where the **interim** handle is wired (FR-9, Phase A). Core 0.3.0's canvas
- * exposes a *single* shared `sdk` property applied to every mount, so a
- * per-instance handle cannot be handed in at mount through the canvas; instead
- * the host mints one interim handle per placed instance (distinct identity,
- * fixture/no-op-backed — see `../host-sdk`) and assigns it onto each mounted
- * widget element as the canvas reports its renders (`gm:rendered` / lazy
- * `gm:widget-mounted`). The handle therefore lands immediately **after** a mount
- * rather than at it, so a context consumer must read `element.sdk` at data-read
- * time (its first render/effect), not synchronously in `connectedCallback` — the
- * late-assignment the handle-delivery contract allows (gridmason/core#52). The
- * Phase-B enforcing handle (D-E4) swaps the backing behind this same seam; the
- * widget ABI is unchanged either way.
+ * is where the **reference** enforcing handle is wired (FR-9/FR-14, D-E4). Core's
+ * canvas exposes a *single* shared `sdk` property applied to every mount, so a
+ * per-instance handle cannot be handed in at mount through the canvas; instead the
+ * host mints one reference handle per placed instance (distinct identity,
+ * `min(user, widget)`-enforcing, per-instance remote-identity stamped — see
+ * `../host-sdk`) and assigns it onto each mounted widget element as the canvas
+ * reports its renders (`gm:rendered` / lazy `gm:widget-mounted`). The handle
+ * therefore lands immediately **after** a mount rather than at it, so a context
+ * consumer must read `element.sdk` at data-read time (its first render/effect),
+ * not synchronously in `connectedCallback` — the late-assignment the
+ * handle-delivery contract allows (gridmason/core#52). The handle is the enforcing
+ * reference impl (conformance-green); its records/net backing is an injected
+ * transport the widget ABI never sees.
  */
 export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
   const { canvasRef, effective } = useEditSession();
@@ -146,18 +152,48 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
   // installable. Read as an effect dependency below so the lazy-mount effect re-runs and
   // upgrades a federated widget from its fallback card to its real element (no reload).
   const federatedGeneration = useFederatedGeneration();
-  // One interim-handle registry per canvas host: it owns this page's per-instance
-  // handles and their stable identities across re-renders (`../host-sdk/registry`).
-  const registryRef = useRef<InterimHandleRegistry>(null);
-  registryRef.current ??= new InterimHandleRegistry();
+  // One telemetry adapter per canvas host (SPEC §3, §7, FR-15): the sink every
+  // per-widget error/latency, canvas p95, and widget-reported mark flows through.
+  // Console exporter by default; OTLP added when `VITE_GM_OTLP_ENDPOINT` is set
+  // (`../adapters/telemetry`). It also owns the auto-degrade budget monitor's
+  // flagged set — the host-side flag core cannot hold (SPEC §1).
+  const telemetryRef = useRef<DashboardTelemetry>(null);
+  telemetryRef.current ??= new DashboardTelemetry({
+    exporters: resolveExporters({ otlpEndpoint: import.meta.env.VITE_GM_OTLP_ENDPOINT }),
+  });
+
+  // One reference-host registry per canvas host: it owns this page's per-instance
+  // enforcing handles, their stable identities across re-renders, and the
+  // host-mediated event bus shared across the page's mounts (`../host-sdk`). Each
+  // mount's `sdk.telemetry` is stamped with its identity and routed to the adapter
+  // (FR-15) via `telemetryFor`.
+  const registryRef = useRef<ReferenceHostRegistry>(null);
+  registryRef.current ??= new ReferenceHostRegistry({
+    telemetryFor: (identity) => telemetryRef.current!.hostTelemetryFor(identity),
+  });
 
   useEffect(() => {
     const el = canvasRef.current;
     if (el === null || effective === undefined) return;
     const registry = registryRef.current!;
+    const telemetry = telemetryRef.current!;
     // New layout = all-new instances: drop the previous render's handles so a
-    // reused grid-item id mints a fresh identity rather than inheriting the old one.
+    // reused grid-item id mints a fresh identity rather than inheriting the old one,
+    // and clear the telemetry flagged set (SPEC §3) so a prior layout's degraded
+    // widget does not stay flagged under the new one.
     registry.reset();
+    telemetry.reset();
+
+    // Wire the telemetry + auto-degrade NFR contract (SPEC §3, §7, FR-15): the
+    // per-widget error/latency sink and the canvas p95 sink both flow to the
+    // adapter, and a widget that exceeds the per-widget latency budget is
+    // auto-degraded by core's boundary to its fallback card (the breach surfaces as
+    // a `widget.latency` `exceeded` event the adapter flags). Set before the layout
+    // so the first render's marks are captured.
+    el.telemetry = telemetry.widgetTelemetry;
+    el.perfTelemetry = telemetry.perfTelemetry;
+    el.latencyBudgetMs = WIDGET_LATENCY_BUDGET_MS;
+    el.autoDegradeOnLatency = true;
 
     const pageType = resolvePageType(page.pageType);
     const pageContext = buildPageContext(pageType, page.entityId);
@@ -178,12 +214,13 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       (import.meta.env.DEV ? sideloadHost()?.describe(identity.widgetID) : undefined);
 
     // The per-mount handle inputs shared across this page's widgets (SPEC §3: one
-    // context for all widgets on a page). The interim handle serves the bound
-    // record refs as fixture data so a context consumer reads them back through
-    // `sdk.records.read`; a no-context page yields no host data → no-op handles.
+    // context for all widgets on a page). A record-scoped page's context implies
+    // the `records.read:<scope>` capabilities its handles declare (the widget side
+    // of the `min(user, widget)` gate), so a context consumer's bound record read
+    // is granted while any read outside them is denied (SPEC §3 rule 1).
     const widgetIds = indexWidgetIds(effective.layout);
     const handleContext = toPageContext(pageContext);
-    const hostData = demoHostData(handleContext);
+    const declaredCapabilities = demoDeclaredCapabilities(handleContext);
 
     // The identity of a placed instance: from the resolved layout, or — for a
     // sideload widget the dev picker just added this session (not yet in `effective`,
@@ -204,8 +241,8 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       const handle = registry.handleFor({
         mountKey: instanceId,
         widgetId,
+        declaredCapabilities,
         ...(handleContext !== undefined ? { context: handleContext } : {}),
-        ...(hostData !== undefined ? { hostData } : {}),
       });
       assignSdkHandle(element, handle);
     };

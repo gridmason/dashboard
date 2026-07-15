@@ -30,57 +30,44 @@
  * own registry, so one bad feed can never abort the boot or touch another
  * registry.
  *
- * **Signature verification is an injected seam.** The served document is the
- * protocol `RevocationFeed` plus a detached registry signature over its canonical
- * bytes (registry SPEC §6: ECDSA P-256/SHA-256 over `canonicalize(feed)`, the same
- * countersign key that approves releases). `@gridmason/protocol@0.3.0` ships the
- * freshness gate (`evaluateFreshness`) and the canonicalizer (`canonicalize`) but
- * **not** a public primitive that verifies this detached feed signature against a
- * pinned countersign root (its cert/DER primitives are internal to
- * `verifySignatureEnvelope`, which only accepts the dual-signature *release*
- * envelope, a different shape). So — exactly as every other boot step defers
- * verification to a dedicated later stage (resolution-client carries bundles
- * untouched for #16; the SW verifies by URL for #19) — this module takes the feed
- * verifier as a {@link FeedSignatureVerifier} the host wires in. A verifier that
- * rejects, or throws, or is absent for a feed, fails that registry closed. See the
- * PR note: a `verifyRevocationFeed` primitive is owed by `@gridmason/protocol`
- * (protocol #16/#17, composed in `verifyRelease` #20).
+ * **Signature verification is a seam over the protocol primitive.** The served
+ * document is the protocol `RevocationFeed` plus a detached registry signature over
+ * its canonical bytes (registry SPEC §6: ECDSA P-256/SHA-256 over
+ * `canonicalize(feed)`, the same countersign key that approves releases). As of
+ * `@gridmason/protocol@0.4.0` (protocol #70) that check is a shipped public
+ * primitive — `verifyRevocationFeed(signed, { countersignRoots })`, the same
+ * audited cert-path/WebCrypto trust leg as the release countersignature — so the
+ * default {@link FeedSignatureVerifier} is {@link protocolFeedVerifier} bound to the
+ * deployment's pinned countersign roots (the very roots release verification pins).
+ * The verifier stays an **injected seam** ({@link FeedSignatureVerifier}) so tests
+ * and alternative hosts can override it; a verifier that rejects, throws, or is
+ * absent for a feed fails that registry closed, and with no roots pinned every feed
+ * is untrusted — the deployment fails closed (SPEC §2).
  */
 import type {
   BlockedArtifact,
   Cursor,
   FreshnessVerdictCode,
-  RevocationFeed,
+  RevocationFeedSignature,
+  RevocationTrustInputs,
+  SignedRevocationFeed,
 } from '@gridmason/protocol';
-import { evaluateFreshness } from '@gridmason/protocol';
+import { evaluateFreshness, verifyRevocationFeed } from '@gridmason/protocol';
+
+// The served revocation-feed wire shape — the protocol `RevocationFeed` plus its
+// detached registry signature (registry SPEC §6, `GET /v1/revocation/feed`) — is
+// now owned by `@gridmason/protocol` (promoted in 0.4.0 alongside the
+// `verifyRevocationFeed` primitive that consumes it). Re-exported here under this
+// module's established names so the boot pipeline and tests keep one import site.
+export type { SignedRevocationFeed };
 
 /**
- * The detached registry signature over a feed's canonical bytes (registry SPEC §6).
- * `cert` is the base64 DER countersign certificate, `sig` the base64 raw ECDSA
- * signature (IEEE-P1363) over `canonicalize(feed)`. This module models the wire
- * shape only — validity is the {@link FeedSignatureVerifier}'s to decide.
+ * The detached registry signature over a feed's canonical bytes (registry SPEC §6):
+ * `cert` the base64 DER countersign certificate, `sig` the base64 raw ECDSA
+ * signature (IEEE-P1363) over `canonicalize(feed)`. Protocol's
+ * {@link RevocationFeedSignature}, kept under this module's original name.
  */
-export interface FeedSignature {
-  /** Signature algorithm; `ES256` at the current feed format. */
-  readonly alg: string;
-  /** Base64 (standard alphabet) DER-encoded countersign certificate. */
-  readonly cert: string;
-  /** Base64 (standard alphabet) raw ECDSA signature (IEEE-P1363) over the canonical feed bytes. */
-  readonly sig: string;
-}
-
-/**
- * The served revocation-feed document: the protocol {@link RevocationFeed} plus its
- * detached {@link FeedSignature} (registry SPEC §6, `GET /v1/revocation/feed`). The
- * host reconstructs the canonical bytes from `feed`, checks `signature` against its
- * pinned countersign root, then passes `feed` to `evaluateFreshness`.
- */
-export interface SignedRevocationFeed {
-  /** The signed feed body — everything `evaluateFreshness` needs. */
-  readonly feed: RevocationFeed;
-  /** The detached registry signature over `canonicalize(feed)`. */
-  readonly signature: FeedSignature;
-}
+export type FeedSignature = RevocationFeedSignature;
 
 /**
  * Verifies a served feed's detached signature against the host's pinned countersign
@@ -93,6 +80,28 @@ export interface SignedRevocationFeed {
 export type FeedSignatureVerifier = (
   signed: SignedRevocationFeed,
 ) => boolean | Promise<boolean>;
+
+/**
+ * The default {@link FeedSignatureVerifier}: `@gridmason/protocol`'s
+ * `verifyRevocationFeed` (0.4.0, protocol #70) authenticating a served feed's
+ * detached ES256 signature over `canonicalize(feed)` against the deployment's
+ * pinned **countersign roots**. Those roots are exactly the ones the
+ * release-verification path pins (`FederatedTrustConfig.countersignRoots`): one
+ * registry countersign key signs both a release's countersignature and its
+ * revocation feed (registry SPEC §6), so a host pins one root and authenticates
+ * both. Returns the primitive's `ok` gate — any non-`ok` verdict (unsupported alg,
+ * malformed/untrusted cert, invalid signature) verifies to `false` and fails that
+ * feed's registry closed. With **no** roots pinned every feed is
+ * `signature-cert-untrusted`, so the deployment fails closed exactly as an absent
+ * verifier did (SPEC §2). Wired as the boot default; the seam stays the override
+ * point for tests and alternative hosts.
+ */
+export function protocolFeedVerifier(
+  countersignRoots: readonly Uint8Array[],
+): FeedSignatureVerifier {
+  const trust: RevocationTrustInputs = { countersignRoots };
+  return async (signed) => (await verifyRevocationFeed(signed, trust)).ok;
+}
 
 /**
  * A host's per-registry cursor store (registry SPEC §6: one cursor per registry).

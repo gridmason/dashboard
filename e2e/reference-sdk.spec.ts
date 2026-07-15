@@ -1,19 +1,20 @@
 import { expect, test } from '@playwright/test';
 
 /**
- * Interim SDK handle wiring (FR-9, Phase A — docs/SPEC.md §6, §3, §2).
+ * Reference SDK handle wiring (FR-9/FR-14, D-E4 — docs/SPEC.md §6, §3, §2).
  *
- * Proves, against the real built bundle, what the `host-sdk/` unit tests assert
- * in isolation: the canvas glue mints one **distinct per-instance** interim
- * handle per mounted widget (SPEC §3 rule 5) and assigns it onto the widget
- * element's `sdk` property, and a record-scoped page's handle reads its context
- * record back **through** `sdk.records.read` (fixture-backed). The first-party
- * demo widgets (#6) do not yet consume the handle themselves — record-summary's
- * SDK read-path is deferred — so this reads it off the element directly, the way
- * a context consumer will once that seam lands. Only the healthy demo widgets are
- * counted: the home page's deliberate crasher stays in its error state, so the
- * canvas never mounts it and it never receives a handle (a widget in its error
- * state has no mounted element to assign onto).
+ * Proves, against the real built bundle, what the `host-sdk/` unit + conformance
+ * tests assert in isolation: the canvas glue mints one **distinct per-instance**
+ * enforcing reference handle per mounted widget (SPEC §3 rule 5) and assigns it
+ * onto the widget element's `sdk` property, and a record-scoped page's handle
+ * reads its context record back **through** `sdk.records.read` — the read passing
+ * the handle's `min(user, widget)` gate (the page's context declares the customer
+ * read; the single-tenant owner grants it). The first-party demo widgets (#6) do
+ * not yet consume the handle themselves — record-summary's SDK read-path is
+ * deferred — so this reads it off the element directly, the way a context consumer
+ * will once that seam lands. Only the healthy demo widgets are counted: the home
+ * page's deliberate crasher stays in its error state, so the canvas never mounts it
+ * and it never receives a handle.
  */
 
 const CANVAS = 'gm-page-canvas[aria-label="Page canvas — grid of widgets"]';

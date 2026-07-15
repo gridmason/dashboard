@@ -1,6 +1,10 @@
 import type { DetailedHTMLProps, HTMLAttributes, Ref } from 'react';
 import type { EffectiveLayout } from '@gridmason/core/engine';
-import type { WidgetDescriptor } from '@gridmason/core/canvas';
+import type {
+  CanvasPerfTelemetry,
+  WidgetDescriptor,
+  WidgetTelemetry,
+} from '@gridmason/core/canvas';
 
 /**
  * JSX typing for core's `<gm-page-canvas>` custom element (SPEC §2), as it is in
@@ -33,6 +37,30 @@ export interface GmPageCanvasElement extends HTMLElement {
    * Retry; an unresolved tag stays an anonymous card.
    */
   widgetDescriptor: WidgetDescriptor | undefined;
+  /**
+   * The per-widget error-boundary telemetry sink: per-widget error + latency
+   * attribution (SPEC §7, FR-15). The host binds the {@link DashboardTelemetry}
+   * adapter's `widgetTelemetry`.
+   */
+  telemetry: WidgetTelemetry | undefined;
+  /**
+   * The canvas-interactive perf sink: each data→interactive render emits a
+   * `canvas.interactive` measurement (the p95 < 300 ms attribution point, SPEC §7,
+   * FR-15). The host binds the adapter's `perfTelemetry`.
+   */
+  perfTelemetry: CanvasPerfTelemetry | undefined;
+  /**
+   * Latency budget (ms) a pending widget may take before a `widget.latency`
+   * `exceeded` event fires (SPEC §7). `undefined`/`0` disables it. The host sets
+   * it from `WIDGET_LATENCY_BUDGET_MS`.
+   */
+  latencyBudgetMs: number | undefined;
+  /**
+   * Whether a widget that exceeds {@link latencyBudgetMs} is auto-degraded to its
+   * fallback card (SPEC §3, FR-15). The host enables it so a budget-busting widget
+   * degrades gracefully instead of dragging the page.
+   */
+  autoDegradeOnLatency: boolean;
   /**
    * The instance ids currently mounted on the active grid, in mount order. The
    * host reads it to scope a dev hot-reload remount to instances that are actually

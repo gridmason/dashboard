@@ -53,9 +53,13 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
-  # Playwright boot smoke test against the built bundle (FR-1, FR-16).
+  # Full Playwright e2e matrix against the built bundle (FR-16, SPEC §7): boot,
+  # add-widget gating, governance resolution, error boundary, telemetry +
+  # auto-degrade, canvas-interactive perf budget, and the sideload gate. `npm run
+  # e2e` runs both Playwright projects (production preview + dev-server sideload),
+  # so this one job is the whole matrix.
   e2e:
-    name: E2E boot smoke test
+    name: E2E matrix (boot, gating, governance, boundary, auto-degrade, sideload)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -90,12 +94,15 @@ jobs:
       - run: npm run api:typecheck
       - run: npm run api:test
 
-  # Lighthouse CI perf pass over the built bundle. Stub gate for D-E0 — present
-  # and runs, non-blocking; the NFR budget is asserted in D-E4 (FR-16).
+  # Lighthouse CI NFR gate over the built bundle (FR-16, SPEC §7): blocking budget
+  # assertions (accessibility ≥ 0.95 — WCAG 2.1 AA; performance ≥ 0.85), 3 runs
+  # for a stable median (lighthouserc.json). The precise "p95 canvas interactive
+  # < 300 ms after data" NFR is enforced by the Playwright perf spec (e2e/perf.spec.ts),
+  # which measures the app's own canvas-interactive telemetry rather than
+  # Lighthouse's simulated throttling.
   lighthouse:
-    name: Lighthouse CI (stub)
+    name: Lighthouse CI (NFR gate)
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

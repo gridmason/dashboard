@@ -18,6 +18,12 @@ export interface SessionUser {
   readonly username: string;
   readonly displayName?: string;
   readonly roles: readonly string[];
+  /**
+   * The user's granted capabilities (string form) — the `user` side of the
+   * `min(user, widget)` gate the reference API enforces (SPEC §3, §6, FR-14).
+   * Empty when the config user declares none.
+   */
+  readonly capabilities: readonly string[];
 }
 
 function toSessionUser(user: DemoUser): SessionUser {
@@ -25,6 +31,7 @@ function toSessionUser(user: DemoUser): SessionUser {
     id: user.id,
     username: user.username,
     roles: user.roles ?? [],
+    capabilities: user.capabilities ?? [],
     ...(user.displayName !== undefined ? { displayName: user.displayName } : {}),
   };
 }
