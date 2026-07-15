@@ -160,7 +160,7 @@ Depends on: D-E3; sdk S-E3
 
 ## Risks & open questions
 
-- SW-in-dev ergonomics (Vite dev server vs verifying SW) — dev builds may bypass SW with loud labeling; decide in D-E4 issue 1.
+- SW-in-dev ergonomics (Vite dev server vs verifying SW) — **decided (D-E4.1 / #19): a development build bypasses the verifying SW with loud console labeling**; `import.meta.env.DEV` gates the bypass so it is dead-stripped from production, which always verifies. The federated path is never weakened (see docs/SPEC.md §2 realization note).
 - Import-map dynamism (updating after gate changes without full reload) — acceptable to require reload in v0; note in D-E3 issue 1.
 
 ## Changelog

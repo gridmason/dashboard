@@ -35,6 +35,8 @@ import { bootFederated, type FederatedBootDeps, type FederatedBootResult } from 
 import { installFederatedHost } from './federated-host';
 import { federatedKilledInstanceIds } from './federated-kills';
 import type { FederatedRegistryConfig } from './federated-config';
+import { establishFederatedSwControl } from './sw/register-federated-sw';
+import type { MultihashString } from '@gridmason/protocol/verify';
 
 /**
  * The deployment's federated config, or `null` when no registry is federated. The
@@ -45,6 +47,42 @@ import type { FederatedRegistryConfig } from './federated-config';
  */
 export function loadFederatedConfig(): FederatedRegistryConfig | null {
   return null;
+}
+
+/**
+ * **Control-before-import-map gate** (SPEC §2; FR-11). A verified federated remote may
+ * become mountable **only** once the shell's Service Worker controls the page and is
+ * enforcing the release-doc `url → hash` table — the SW is the per-fetch check that
+ * makes `import()` of a remote safe (a mismatched or unclaimed byte becomes a network
+ * error). Resolves `true` when it is safe to install the remotes, `false` to fail
+ * closed (no federated remote loads without the verifying SW in front of it).
+ *
+ * **Dev bypass (documented decision, SPEC §4 / docs/SPEC.md Risks).** In a development
+ * build the Vite dev server serves modules the verifying SW cannot sit in front of
+ * without fighting HMR, so the SW is **bypassed with loud labeling** — federated
+ * remotes load by direct `import()`, unverified. `import.meta.env.DEV` is a static
+ * `false` in a production build, so this branch and its warning are stripped there and
+ * production always goes through the SW.
+ */
+async function establishFederatedControl(
+  urlHashes: ReadonlyMap<string, MultihashString>,
+): Promise<boolean> {
+  if (import.meta.env.DEV) {
+    console.warn(
+      '[gridmason] DEV BUILD: Service-Worker hash verification is BYPASSED for ' +
+        'federated remotes — they load unverified. This is a dev-only ergonomics ' +
+        'decision (SPEC §4); production builds always verify. Do NOT rely on dev for trust.',
+    );
+    return true;
+  }
+  const controlled = await establishFederatedSwControl(urlHashes);
+  if (!controlled) {
+    console.warn(
+      '[gridmason] Service Worker unavailable or uncontrolled — failing closed: ' +
+        'no federated remote will load (SPEC §2). Shell-bundled widgets are unaffected.',
+    );
+  }
+  return controlled;
 }
 
 /**
@@ -96,6 +134,17 @@ export function FederatedBootProvider({
         return;
       }
       if (!active) return;
+      // Control-before-import-map (SPEC §2; FR-11): only gate on the verifying SW when
+      // there are verified remotes whose code would actually run. With nothing to
+      // mount (all refused/excluded, or a killed set), there is no federated `import()`
+      // to protect, so the host still installs for its refusal/fallback cards — exactly
+      // the pre-#19 behaviour — without registering a SW (showcase stays a no-op).
+      if (result.remotes.length > 0) {
+        const controlled = await establishFederatedControl(result.urlHashes);
+        if (!active) return;
+        // Fail closed: no SW control → no federated remote enters the active import map.
+        if (!controlled) return;
+      }
       installFederatedHost({
         remotes: () => result.remotes,
         describe: (id: WidgetID) => {
