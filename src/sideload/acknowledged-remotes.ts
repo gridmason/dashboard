@@ -53,7 +53,7 @@ export function acknowledgedRemote(
   remote: AcknowledgedRemote,
   deps: AcknowledgedRemoteDeps = {},
 ): LocalRemote {
-  const fetchImpl = deps.fetchImpl ?? fetch;
+  const fetchImpl = deps.fetchImpl ?? globalThis.fetch.bind(globalThis);
   const telemetry = deps.telemetry ?? consoleSideloadTelemetry;
   const importModule =
     deps.importModule ?? ((entryUrl: string) => import(/* @vite-ignore */ entryUrl));

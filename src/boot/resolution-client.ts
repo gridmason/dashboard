@@ -73,7 +73,7 @@ export async function resolveGateSnapshot(
   snapshot: GateSnapshot,
   options: ResolveOptions,
 ): Promise<ImportMapFragment> {
-  const fetchImpl = options.fetchImpl ?? fetch;
+  const fetchImpl = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
 
   let response: Response;
   try {

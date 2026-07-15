@@ -225,7 +225,9 @@ export class RevocationFeedClient {
   constructor(options: RevocationFeedClientOptions) {
     this.#verifier = options.verifier;
     this.#cursors = options.cursors ?? new InMemoryCursorStore();
-    this.#fetch = options.fetchImpl ?? fetch;
+    // The bind is load-bearing: this.#fetch(...) invokes with the client instance as
+    // the receiver, and WebIDL methods like fetch throw "Illegal invocation" off-Window.
+    this.#fetch = options.fetchImpl ?? globalThis.fetch.bind(globalThis);
     this.#now = options.now ?? Date.now;
   }
 
