@@ -1,0 +1,29 @@
+{
+  "gate": {
+    "registry": "localhost-registry",
+    "modules": [{ "publisher": "demo", "tag": "demo-hello", "version": "0.1.0" }]
+  },
+  "resolveEndpoint": "http://localhost:8080/v1/resolve",
+  "feedUrl": "http://localhost:8080/v1/revocation/feed",
+  "servingOrigin": "http://localhost:8080",
+  "trust": {
+    "trustRoot": {
+      "formatVersion": "1.0",
+      "registryId": "localhost-registry",
+      "countersignRoots": ["localhost-countersign-root-1"],
+      "issuerAllowlist": ["https://token.actions.githubusercontent.com"],
+      "logPublicKeys": ["localhost-log-key-1"],
+      "notBefore": 1752566400000,
+      "notAfter": 1784102400000
+    },
+    "pins": [
+      { "registryId": "localhost-registry", "root": "localhost-countersign-root-1", "channel": "deploy-time" }
+    ],
+    "publisherCARoots": [],
+    "countersignRoots": ["TE9DQUwtQ09VTlRFUlNJR04tUk9PVC1TUEtJLURFUi1QTEFDRUhPTERFUg=="],
+    "logPublicKey": {
+      "name": "localhost-registry",
+      "key": "TE9DQUwtRUQyNTUxOS0zMi1CWVRFLUxPRy1LRVktUExBQ0VIT0xERVIhIQ=="
+    }
+  }
+}

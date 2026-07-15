@@ -34,20 +34,12 @@ import type { WidgetID } from '@gridmason/protocol';
 import { bootFederated, type FederatedBootDeps, type FederatedBootResult } from './federated-boot';
 import { installFederatedHost } from './federated-host';
 import { federatedKilledInstanceIds } from './federated-kills';
-import type { FederatedRegistryConfig } from './federated-config';
+import { FederatedConfigError, type FederatedRegistryConfig } from './federated-config';
+import { loadFederatedConfig } from './federated-config-loader';
+import { FederatedConfigErrorBanner } from './FederatedConfigErrorBanner';
+import { isStaticDemo } from '../adapters/backend';
 import { establishFederatedSwControl } from './sw/register-federated-sw';
 import type { MultihashString } from '@gridmason/protocol/verify';
-
-/**
- * The deployment's federated config, or `null` when no registry is federated. The
- * showcase ships `null` (no live registry configured yet); a deployment that
- * federates supplies its {@link FederatedRegistryConfig} here. Kept a function (not
- * a constant) so a future config source — a served config file or build-time env —
- * drops in behind this one seam without touching the provider.
- */
-export function loadFederatedConfig(): FederatedRegistryConfig | null {
-  return null;
-}
 
 /**
  * **Control-before-import-map gate** (SPEC §2; FR-11). A verified federated remote may
@@ -99,21 +91,58 @@ export function useFederatedGeneration(): number {
 
 export function FederatedBootProvider({
   children,
-  config = loadFederatedConfig(),
+  config,
   deps,
 }: {
   children: ReactNode;
-  /** The federated config; defaults to {@link loadFederatedConfig}. A harness may override it. */
+  /**
+   * The federated config. Omitted (the normal case): the provider **loads** it from
+   * the deployment (`loadFederatedConfig`, `<base>/federated.json`). A harness may
+   * inject one directly — a `FederatedRegistryConfig` to boot, or `null` to force the
+   * inert path — which skips the load.
+   */
   config?: FederatedRegistryConfig | null;
   /** Injected boot collaborators (fetch/verify/clock/import); defaulted for production. */
   deps?: FederatedBootDeps;
 }): React.JSX.Element {
   const [generation, setGeneration] = useState(0);
+  // The config loaded from the deployment (when `config` was not injected), and the
+  // loud surface for a malformed one (SPEC §4.4 fail-loud, issue #80).
+  const [loadedConfig, setLoadedConfig] = useState<FederatedRegistryConfig | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+
+  // Load the deployment's federated config once, unless a config was injected (a
+  // harness override) or this is the serverless static-demo build (federation is a
+  // server-backed concern, Phase B — the static showcase never federates).
+  useEffect(() => {
+    if (config !== undefined || isStaticDemo()) return;
+    let active = true;
+    void (async () => {
+      try {
+        const loaded = await loadFederatedConfig();
+        if (active && loaded !== null) setLoadedConfig(loaded);
+      } catch (error) {
+        // A served-but-malformed config: surface it loudly rather than staying inert.
+        if (active) {
+          setConfigError(
+            error instanceof FederatedConfigError ? error.message : String(error),
+          );
+        }
+      }
+    })();
+    return () => {
+      active = false;
+    };
+  }, [config]);
+
+  // The config to boot: an injected one wins; otherwise whatever was loaded (null
+  // until the load resolves, and null forever if none is served — both inert).
+  const effectiveConfig = config !== undefined ? config : loadedConfig;
 
   useEffect(() => {
-    // No registry federated (the default): install nothing, so the render path sees
-    // no federated remote in the import map. Exactly the Phase-A canvas.
-    if (config === null) {
+    // No registry federated (the default, or before the async load resolves): install
+    // nothing, so the render path sees no federated remote. Exactly the Phase-A canvas.
+    if (effectiveConfig === null) {
       installFederatedHost(null);
       return;
     }
@@ -127,7 +156,7 @@ export function FederatedBootProvider({
     void (async () => {
       let result: FederatedBootResult;
       try {
-        result = await bootFederated(config, { ...(deps ?? {}), signal: controller.signal });
+        result = await bootFederated(effectiveConfig, { ...(deps ?? {}), signal: controller.signal });
       } catch {
         // Fail closed: a resolution failure installs no federated remote (SPEC §2).
         // The deployment still renders its shell-bundled + acknowledged widgets.
@@ -165,7 +194,12 @@ export function FederatedBootProvider({
       controller.abort();
       installFederatedHost(null);
     };
-  }, [config, deps]);
+  }, [effectiveConfig, deps]);
 
-  return <FederatedBootContext.Provider value={generation}>{children}</FederatedBootContext.Provider>;
+  return (
+    <FederatedBootContext.Provider value={generation}>
+      {configError !== null ? <FederatedConfigErrorBanner message={configError} /> : null}
+      {children}
+    </FederatedBootContext.Provider>
+  );
 }

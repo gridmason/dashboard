@@ -101,21 +101,56 @@ bundle — run it alongside the app if you want the reference persistence backen
 ### Connecting a registry
 
 Federated boot — resolving and verifying widget remotes from a live Gridmason
-Registry — is **Phase B** (SPEC milestone M2, epic D-E3) and is not wired in this
-Phase-A build; the dashboard currently renders demo page types from a local
-import map, not a registry. See the build plan
-([`docs/specs/dashboard-v0/spec.md`](docs/specs/dashboard-v0/spec.md)) for status.
+Registry — is driven by a **deployment config** the dashboard loads at boot from
+its own origin: `GET <base>/federated.json`. Absent (the default showcase) →
+federation stays inert and the dashboard renders its local demo widgets;
+malformed → the shell shows a loud error banner (never silently inert). Resolving
+a remote end-to-end additionally needs a **running registry** (the `registry`
+repo) reachable with CORS — until one is up, a valid config loads and boot is
+attempted but fails closed.
 
-What a deployment can configure **today** is the CSP surface for a registry it
-intends to federate. The production policy is self-only by default; a deployment
-that will resolve remotes from a registry appends that registry's trusted CDN
-origin(s) to `script-src` and `connect-src` (the verifying Service Worker reads
-signed content from there). For the `vite preview` report-only validation server,
-set `GRIDMASON_REGISTRY_ORIGINS` (comma- or space-separated) and those origins
-are folded into the reported policy; for the production nginx image, add the same
-origins to the header in `docker/nginx.conf`. The full mechanism, including
-acknowledged-sideload origins and connect-only origins, is documented in
-[`docs/csp.md`](docs/csp.md#federating-a-registry).
+**Where the config lives, and why (SPEC §4.4).** `federated.json` is served by the
+deployment, from the **app's own origin** — this is SPEC §4.4's **deploy-time trust
+channel**. The trust **pins** in it (the countersign roots the registry's releases
+must chain to) are the operator's out-of-band material: they come from the
+deployment, not from the registry being authorized and not over the resolution
+API. `verifyRelease` never trusts a trust-root document that no pin covers, so an
+attacker who controls the registry cannot supply its own pins — and cannot alter a
+file on the app's origin. Co-locating the pins with the app bundle the same
+operator deploys is therefore the deploy-time channel, not a weaker one. (The
+trust-root *document* is cryptographically gated by those pins and may travel any
+channel; the example bakes it into the same file for simplicity.)
+
+**Config shape.** See the complete template at
+[`docs/examples/federated.json`](docs/examples/federated.json). Because it is JSON,
+the trust material's binary fields are **base64**: `trust.publisherCARoots` and
+`trust.countersignRoots` (SPKI-DER public keys) and `trust.logPublicKey.key` (the
+32-byte Ed25519 log key). The loader (`src/boot/federated-config-loader.ts`)
+decodes them and validates the envelope; everything else is JSON-native.
+
+**Local dev example.** Point a dev dashboard at a local registry:
+
+```bash
+# 1. Run a local registry (see the `registry` repo) on :8080.
+# 2. Fetch its ephemeral trust root and drop the config into public/ (git-ignored):
+mkdir -p public
+cp docs/examples/federated.json public/federated.json
+#    Then edit public/federated.json:
+#    - trust.trustRoot   ← the body of the registry's GET /trust-root.json
+#    - trust.pins[].root  ← a countersignRoot id from that document (channel: "deploy-time")
+#    - trust.countersignRoots / trust.logPublicKey.key ← base64 of the registry's published keys
+#    - gate.modules       ← the (publisher, tag, version) of one demo remote to enable
+# 3. Run the dev server; the DEV build bypasses the verifying SW with loud logging.
+npm run dev
+```
+
+**CSP.** The default production policy is self-only, so a real registry's origins
+must be added to `connect-src` (resolution/feed) and `script-src` (verified remote
+modules). For the `vite preview` report-only server set `GRIDMASON_REGISTRY_ORIGINS`
+(comma/space-separated); for the nginx image add them to `docker/nginx.conf`. Full
+mechanism (including connect-only and acknowledged-sideload origins) in
+[`docs/csp.md`](docs/csp.md#federating-a-registry). Loading `federated.json` itself
+needs no CSP change — it is same-origin (`connect-src 'self'`).
 
 ## Static demo build
 
