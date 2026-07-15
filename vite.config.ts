@@ -1,3 +1,4 @@
+import { fileURLToPath } from 'node:url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { devSideloadCsp, isDevSideloadGateEnabled } from './vite/dev-sideload-csp';
@@ -50,6 +51,21 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // The shell-owned verifying Service Worker (FR-11, src/sw/federated-sw.ts) is a
+    // second entry emitted to the bundle **root** as `federated-sw.js` (not under
+    // assetsDir), so it is served from `/federated-sw.js` and can register with scope
+    // `/` — a nested `/assets/…` path would be scoped to `/assets/` and never control
+    // the app. Every other chunk keeps Vite's default hashed `assets/[name]-[hash]`.
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL('./index.html', import.meta.url)),
+        'federated-sw': fileURLToPath(new URL('./src/sw/federated-sw.ts', import.meta.url)),
+      },
+      output: {
+        entryFileNames: (chunk) =>
+          chunk.name === 'federated-sw' ? 'federated-sw.js' : 'assets/[name]-[hash].js',
+      },
+    },
   },
   server: {
     port: 5173,
