@@ -223,4 +223,53 @@ describe('resolveKills — force-unmount decision (registry SPEC §6 revoked vs 
 
     expect(kills).toEqual([]);
   });
+
+  it('unmounts an unknown-version instance under an exact-version kill of its tag (fail closed)', () => {
+    // A live instance verified under an earlier boot generation carries no version.
+    const unknownVersion: readonly MountedRemote[] = [
+      { registryId: REGISTRY, tag: 'acme-clock', version: '' },
+    ];
+
+    const kills = resolveKills(
+      unknownVersion,
+      verdicts(
+        fresh(REGISTRY, [{ artifact: 'acme-clock@1.2.0', state: 'killed', severity: 'critical' }]),
+        fresh(OTHER),
+      ),
+    );
+
+    expect(kills).toEqual([{ registryId: REGISTRY, tag: 'acme-clock', version: '' }]);
+  });
+
+  it('leaves an unknown-version instance of a different tag untouched', () => {
+    const unknownVersion: readonly MountedRemote[] = [
+      { registryId: REGISTRY, tag: 'acme-chart', version: '' },
+    ];
+
+    const kills = resolveKills(
+      unknownVersion,
+      verdicts(
+        fresh(REGISTRY, [{ artifact: 'acme-clock@1.2.0', state: 'killed', severity: 'critical' }]),
+        fresh(OTHER),
+      ),
+    );
+
+    expect(kills).toEqual([]);
+  });
+
+  it('does not unmount an unknown-version instance whose only tag match is a revoke (not a kill)', () => {
+    const unknownVersion: readonly MountedRemote[] = [
+      { registryId: REGISTRY, tag: 'acme-clock', version: '' },
+    ];
+
+    const kills = resolveKills(
+      unknownVersion,
+      verdicts(
+        fresh(REGISTRY, [{ artifact: 'acme-clock@1.2.0', state: 'revoked', severity: 'low' }]),
+        fresh(OTHER),
+      ),
+    );
+
+    expect(kills).toEqual([]);
+  });
 });

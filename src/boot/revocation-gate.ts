@@ -177,12 +177,23 @@ function filterRegistry(
  * The blocked entry that names `(tag, version)`, or `undefined`. Matches a feed
  * entry `artifact` equal to the bare `tag` (all versions) or the exact
  * `` `${tag}@${version}` ``.
+ *
+ * **Unknown version fails closed.** A mounted instance whose version is unknown
+ * (`''` — e.g. verified under an earlier boot generation, so no version was carried
+ * forward) cannot be matched against an exact `tag@version` entry, yet it must not
+ * outlive a kill for its tag. So an unknown version matches **any** blocked entry for
+ * its tag — the bare `tag` or any `` `${tag}@…` `` — rather than only the bare-tag
+ * entry. This is the safe default for a kill switch (SPEC §2).
  */
 function matchBlocked(
   blocked: readonly BlockedArtifact[],
   tag: string,
   version: string,
 ): BlockedArtifact | undefined {
+  if (version === '') {
+    const prefix = `${tag}@`;
+    return blocked.find((entry) => entry.artifact === tag || entry.artifact.startsWith(prefix));
+  }
   const qualified = `${tag}@${version}`;
   return blocked.find((entry) => entry.artifact === tag || entry.artifact === qualified);
 }
