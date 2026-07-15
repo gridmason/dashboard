@@ -17,6 +17,7 @@ import { LayoutStore } from './layout-store/index';
 import { GovernanceStore } from './governance-store/index';
 import { SideloadRegistrationStore } from './sideload-store/index';
 import { InstanceTokenRegistry } from './sdk-identity/index';
+import { createScopedFetchService } from './scoped-fetch/index';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const LAYOUT_STORE_PATH =
@@ -36,8 +37,16 @@ const governance = new GovernanceStore({ filePath: GOVERNANCE_STORE_PATH });
 const sideload = new SideloadRegistrationStore({ filePath: SIDELOAD_STORE_PATH });
 const auth = new AuthService(config);
 const identity = new InstanceTokenRegistry();
+// The scoped-fetch proxy's declared-capability resolver is now backed by the
+// instance-token rail (#21/FR-14): a registered token resolves to the widget's
+// declared capabilities, so scoped-fetch re-checks a `net:<host>` call against the
+// same rail that gates records — a token the rail does not know resolves to none
+// and is denied (fail closed). runScopedFetch's re-check is untouched.
+const scopedFetch = createScopedFetchService({
+  resolve: (token) => identity.resolve(token)?.declaredCapabilities,
+});
 
-const server = createApp({ config, store, governance, sideload, auth, identity });
+const server = createApp({ config, store, governance, sideload, auth, identity, scopedFetch });
 server.listen(PORT, () => {
   process.stdout.write(`[demo-api] listening on http://localhost:${PORT}\n`);
 });

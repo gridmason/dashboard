@@ -32,10 +32,16 @@
 
 import { formatCapability, grantsCapability, parseCapability, type Capability } from '@gridmason/protocol';
 import type { WidgetID } from '@gridmason/protocol';
+import { INSTANCE_TOKEN_HEADER } from '@gridmason/sdk';
 import type { SessionUser } from '../auth/index';
 
-/** The transport header the per-instance token rides under (mirrors `@gridmason/sdk`). */
-export const INSTANCE_TOKEN_HEADER = 'x-gridmason-instance-token';
+/**
+ * The transport header the per-instance token rides under — the pinned
+ * `@gridmason/sdk` contract constant (`x-gridmason-instance-token`), re-exported so
+ * every server reader (this rail and the scoped-fetch proxy) matches exactly what
+ * the SDK identity stamper writes client-side.
+ */
+export { INSTANCE_TOKEN_HEADER };
 
 /** A registered per-instance binding: the token mapped to its mount, widget, owner, and declared caps. */
 export interface InstanceBinding {

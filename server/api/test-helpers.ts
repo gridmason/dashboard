@@ -11,6 +11,11 @@ import { LayoutStore, type LayoutDoc } from '../layout-store/index';
 import { GovernanceStore } from '../governance-store/index';
 import { SideloadRegistrationStore } from '../sideload-store/index';
 import { InstanceTokenRegistry } from '../sdk-identity/index';
+import {
+  createScopedFetchService,
+  StaticInstanceCapabilityStore,
+  type UpstreamFetch,
+} from '../scoped-fetch/index';
 
 /** A two-user config matching the checked-in sample's shape. */
 export function makeConfig(): DemoConfig {
@@ -60,22 +65,41 @@ export interface TestServer {
   readonly store: LayoutStore;
   readonly governance: GovernanceStore;
   readonly sideload: SideloadRegistrationStore;
+  /** The instance-token identity rail (SPEC §3, §6; FR-14), for direct assertions. */
   readonly identity: InstanceTokenRegistry;
+  /** The scoped-fetch declared-capability resolver, for seeding a test instance's `net:<host>` grants. */
+  readonly capabilities: StaticInstanceCapabilityStore;
   close(): Promise<void>;
+}
+
+/** Options for {@link startTestServer} — inject a stub upstream so a proxy test never hits the network. */
+export interface TestServerOptions {
+  /** The scoped-fetch proxy's outbound fetch. Defaults to the global `fetch`. */
+  readonly upstream?: UpstreamFetch;
 }
 
 /**
  * Boot the demo API on an ephemeral port with in-memory stores. Returns the base
- * URL, the layout + governance + sideload stores + instance-token registry (for
- * direct assertions), and a `close` teardown.
+ * URL, the layout + governance + sideload stores, the instance-token registry, and
+ * the scoped-fetch capability resolver (for direct assertions/seeding), plus a
+ * `close` teardown.
  */
-export async function startTestServer(config: DemoConfig = makeConfig()): Promise<TestServer> {
+export async function startTestServer(
+  config: DemoConfig = makeConfig(),
+  options: TestServerOptions = {},
+): Promise<TestServer> {
   const store = new LayoutStore();
   const governance = new GovernanceStore();
   const sideload = new SideloadRegistrationStore();
   const auth = new AuthService(config);
   const identity = new InstanceTokenRegistry();
-  const server = createApp({ config, store, governance, sideload, auth, identity });
+  // The scoped-fetch tests seed net:<host> grants directly on this static store, so
+  // it (not the identity rail) backs the proxy resolver under test; the identity
+  // rail is exercised on its own routes. Production (server/main.ts) backs the
+  // resolver with the identity rail — see its wiring.
+  const capabilities = new StaticInstanceCapabilityStore();
+  const scopedFetch = createScopedFetchService(capabilities, options.upstream);
+  const server = createApp({ config, store, governance, sideload, auth, identity, scopedFetch });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
@@ -84,6 +108,7 @@ export async function startTestServer(config: DemoConfig = makeConfig()): Promis
     governance,
     sideload,
     identity,
+    capabilities,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
 }
