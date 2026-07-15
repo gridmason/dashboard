@@ -10,7 +10,7 @@ import {
 import { listPageTypes } from '../pages/page-types';
 
 describe('local import map (SPEC §2, GW-D22)', () => {
-  it('assembles the five first-party demo widgets as local remotes', () => {
+  it('assembles the six first-party demo widgets as local remotes', () => {
     const map = assembleImportMap();
     expect([...map.keys()].sort()).toEqual(Object.values(WIDGET_TAGS).sort());
     for (const tag of Object.values(WIDGET_TAGS)) {

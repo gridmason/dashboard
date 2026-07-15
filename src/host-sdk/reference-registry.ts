@@ -29,6 +29,18 @@ import { HostEventBus } from './event-bus';
 import { mintInstanceId, mintInstanceToken } from './mint';
 import { createReferenceMount, type ReferenceMount } from './reference-host';
 import { LocalDemoTransport, type OutboundTransport } from './transport';
+import type { HostInstanceTelemetry } from '../adapters/telemetry';
+
+/**
+ * Builds the identity-stamped {@link HostInstanceTelemetry} for one mount (SPEC §3
+ * rule 5, FR-15): given the mount's minted `(instanceId, widgetID)`, return the
+ * sink its `sdk.telemetry` forwards to. `DashboardTelemetry.hostTelemetryFor` is
+ * the reference impl; omitted = no-op telemetry (the interim-handle behavior).
+ */
+export type MountTelemetryFactory = (identity: {
+  readonly instanceId: string;
+  readonly widgetID: WidgetId;
+}) => HostInstanceTelemetry;
 
 /**
  * The acting user's capabilities in the single-tenant demo: the deployment owner,
@@ -60,6 +72,12 @@ export interface ReferenceHostRegistryOptions {
   readonly userCapabilities?: readonly Capability[];
   /** The records/net send seam; defaults to {@link LocalDemoTransport} (the showcase backing). */
   readonly transport?: OutboundTransport;
+  /**
+   * Builds each mount's identity-stamped telemetry sink (FR-15). Omitted = mounts
+   * get the no-op telemetry default, so an existing caller (conformance kit, tests)
+   * is unaffected; the canvas wires this to its {@link DashboardTelemetry}.
+   */
+  readonly telemetryFor?: MountTelemetryFactory;
 }
 
 /**
@@ -71,10 +89,12 @@ export class ReferenceHostRegistry {
   readonly #bus = new HostEventBus();
   readonly #userCapabilities: readonly Capability[];
   readonly #transport: OutboundTransport;
+  readonly #telemetryFor: MountTelemetryFactory | undefined;
 
   constructor(options: ReferenceHostRegistryOptions = {}) {
     this.#userCapabilities = options.userCapabilities ?? DEMO_USER_CAPABILITIES;
     this.#transport = options.transport ?? new LocalDemoTransport();
+    this.#telemetryFor = options.telemetryFor;
   }
 
   /**
@@ -86,14 +106,18 @@ export class ReferenceHostRegistry {
     const existing = this.#mounts.get(config.mountKey);
     if (existing !== undefined) return existing.sdk;
     const gate = new CapabilityGate(this.#userCapabilities, config.declaredCapabilities);
+    const instanceId = mintInstanceId();
     const mount = createReferenceMount({
-      instanceId: mintInstanceId(),
+      instanceId,
       widgetId: config.widgetId,
       gate,
       token: mintInstanceToken(),
       transport: this.#transport,
       bus: this.#bus,
       ...(config.context !== undefined ? { context: config.context } : {}),
+      ...(this.#telemetryFor !== undefined
+        ? { telemetry: this.#telemetryFor({ instanceId, widgetID: config.widgetId }) }
+        : {}),
     });
     this.#mounts.set(config.mountKey, mount);
     return mount.sdk;
