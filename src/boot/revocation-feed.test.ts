@@ -243,4 +243,31 @@ describe('RevocationFeedClient.checkAll — independent per-registry scoping', (
     expect(verdicts.get(other)?.status).toBe('fresh');
     expect(verdicts.get(other)?.failClosed).toBe(false);
   });
+
+  // Regression (#82): browsers enforce fetch's receiver (WebIDL "Illegal invocation"),
+  // so the default fetch must be bound to globalThis. Node's fetch doesn't enforce a
+  // receiver, so this stub does — the old unbound default turns every feed check into
+  // a silent fail-closed `unreachable` in every real browser.
+  it('default fetch survives a receiver-enforcing global fetch (browser semantics)', async () => {
+    const realFetch = globalThis.fetch;
+    function enforcing(this: unknown, ..._args: Parameters<typeof fetch>): Promise<Response> {
+      if (this !== undefined && this !== globalThis) {
+        throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      }
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: async () => signedFeed(),
+      } as Response);
+    }
+    globalThis.fetch = enforcing as typeof fetch;
+    try {
+      const client = new RevocationFeedClient({ verifier: YES, now: () => NOW });
+      const verdict = await client.checkRegistry(endpoint());
+      expect(verdict.status).toBe('fresh');
+      expect(verdict.failClosed).toBe(false);
+    } finally {
+      globalThis.fetch = realFetch;
+    }
+  });
 });
