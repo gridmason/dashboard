@@ -81,10 +81,15 @@ export function FederatedBootProvider({
     }
 
     let active = true;
+    // Abort the in-flight boot's fetches when the provider unmounts (or config/deps
+    // change) so a slow resolve/verify/feed call is cancelled rather than left to
+    // settle against a torn-down provider. `bootFederated` threads this signal into
+    // its resolution and revocation-feed fetches.
+    const controller = new AbortController();
     void (async () => {
       let result: FederatedBootResult;
       try {
-        result = await bootFederated(config, deps ?? {});
+        result = await bootFederated(config, { ...(deps ?? {}), signal: controller.signal });
       } catch {
         // Fail closed: a resolution failure installs no federated remote (SPEC §2).
         // The deployment still renders its shell-bundled + acknowledged widgets.
@@ -108,6 +113,7 @@ export function FederatedBootProvider({
 
     return () => {
       active = false;
+      controller.abort();
       installFederatedHost(null);
     };
   }, [config, deps]);

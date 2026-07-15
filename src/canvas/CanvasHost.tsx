@@ -210,6 +210,29 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       assignSdkHandle(element, handle);
     };
 
+    // Force-unmount any of `instanceIds` a revocation verdict now kills (FR-12, #17):
+    // a federated instance already running when a feed marks its artifact `killed`
+    // (or fails its registry closed) must be dropped now. `applyRevocation` keeps a
+    // killed remote out of the map at boot, so this only fires for an instance that
+    // mounted under an earlier boot generation and was killed by a later verdict; the
+    // seam decides which, and withholding them from the layout unmounts them
+    // (`../sideload/remount`). Consulted on the full `gm:rendered` reconcile AND at
+    // lazy mount time (`gm:widget-mounted`), so a virtualized widget that mounts
+    // *after* the reconcile's kill sweep is still caught at its own mount — a killed
+    // instance never stays mounted regardless of timing.
+    const unmountKilled = (instanceIds: readonly string[]): void => {
+      const federated = federatedHost();
+      const current = el.layout;
+      if (federated === null || current === undefined) return;
+      const mountedFederated = instanceIds
+        .map((instanceId) => ({ instanceId, widgetID: widgetIdOf(instanceId) }))
+        .filter((m): m is { instanceId: string; widgetID: WidgetID } => m.widgetID !== undefined);
+      const killed = federated.killedInstanceIds(mountedFederated);
+      if (killed.length > 0) {
+        el.layout = layoutWithoutInstances(current, new Set(killed));
+      }
+    };
+
     // `gm:rendered` fires after every render reconciles the grid (mounts settled).
     // Reconcile the registry to the placed set (releasing unmounted instances —
     // the Phase-A analog of unmount token revocation) and (re)assign live mounts.
@@ -246,29 +269,19 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
         }
       }
 
-      // Revocation kills (FR-12, #17): a federated instance already running when a
-      // feed marks its artifact `killed` (or fails its registry closed) is
-      // force-unmounted now. `applyRevocation` keeps a killed remote out of the map
-      // at boot, so this only fires for an instance that mounted under an earlier
-      // boot generation and was killed by a later verdict; the seam decides which,
-      // and withholding them from the layout unmounts them (`../sideload/remount`).
-      const federated = federatedHost();
-      const current = el.layout;
-      if (federated !== null && current !== undefined) {
-        const mountedFederated = placed
-          .map((instanceId) => ({ instanceId, widgetID: widgetIdOf(instanceId) }))
-          .filter((m): m is { instanceId: string; widgetID: WidgetID } => m.widgetID !== undefined);
-        const killed = federated.killedInstanceIds(mountedFederated);
-        if (killed.length > 0) {
-          el.layout = layoutWithoutInstances(current, new Set(killed));
-        }
-      }
+      // Revocation kills over the full placed set (FR-12, #17).
+      unmountKilled(placed);
     };
     // `gm:widget-mounted` fires when virtualization lazily mounts one widget
-    // between full renders — assign its handle straight away (off in Phase A, but
-    // this keeps the seam correct if a host enables `virtualize`).
+    // between full renders — assign its handle straight away, then consult the kill
+    // set for *this* instance so a widget that mounts after the reconcile's kill
+    // sweep (e.g. scrolled into view) is force-unmounted at its own mount rather than
+    // lingering until the next full render (off in Phase A, but this keeps the seam
+    // correct if a host enables `virtualize`).
     const onWidgetMounted = (event: Event): void => {
-      assignHandle((event as CustomEvent<CanvasWidgetLifecycleDetail>).detail.instanceId);
+      const { instanceId } = (event as CustomEvent<CanvasWidgetLifecycleDetail>).detail;
+      assignHandle(instanceId);
+      unmountKilled([instanceId]);
     };
     el.addEventListener(CANVAS_RENDERED_EVENT, onRendered);
     el.addEventListener(CANVAS_WIDGET_MOUNTED_EVENT, onWidgetMounted);

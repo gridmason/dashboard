@@ -44,7 +44,23 @@ describe('federatedKilledInstanceIds (FR-12; #17 resolveKills adapter)', () => {
   it('matches an exact tag@version kill using the resolved version', () => {
     const v = verdicts(fresh([blocked('acme-chart@1.0.0', 'killed')]));
     expect(federatedKilledInstanceIds(MOUNTED, v, VERSIONS)).toEqual(['i-chart']);
-    // Without the version, the exact tag@version entry cannot match (bare tag differs).
+  });
+
+  it('unmounts an unknown-version instance under an exact-version kill of its tag (fail closed)', () => {
+    // No version for the mounted tag (e.g. verified under an earlier boot generation),
+    // so its version defaults to ''. It must still be caught by an exact tag@version
+    // kill for its tag — an unknown version fails closed rather than surviving.
+    const v = verdicts(fresh([blocked('acme-chart@1.0.0', 'killed')]));
+    expect(federatedKilledInstanceIds(MOUNTED, v, new Map())).toEqual(['i-chart']);
+  });
+
+  it('leaves an unknown-version instance of a different tag untouched', () => {
+    const v = verdicts(fresh([blocked('acme-clock@1.0.0', 'killed')]));
+    expect(federatedKilledInstanceIds(MOUNTED, v, new Map())).toEqual([]);
+  });
+
+  it('does not unmount an unknown-version instance whose tag is only revoked', () => {
+    const v = verdicts(fresh([blocked('acme-chart@1.0.0', 'revoked')]));
     expect(federatedKilledInstanceIds(MOUNTED, v, new Map())).toEqual([]);
   });
 
