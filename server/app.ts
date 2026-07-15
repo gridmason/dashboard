@@ -53,6 +53,9 @@ import {
   setSessionCookie,
   SESSION_COOKIE,
 } from './http-util';
+import type { InstanceTokenRegistry } from './sdk-identity/index';
+import { DEV_PROXY_SDK_PATH } from '@gridmason/protocol';
+import { handleDevProxy, handleRecords, handleSdkInstance } from './sdk-identity/routes';
 
 /** The role a user must hold to publish an org layout (SPEC §6 role stub). */
 const PUBLISHER_ROLE = 'admin';
@@ -67,6 +70,8 @@ export interface AppDeps {
   readonly governance: GovernanceStore;
   readonly sideload: SideloadRegistrationStore;
   readonly auth: AuthService;
+  /** The instance-token identity rail (SPEC §3, §6; FR-14). */
+  readonly identity: InstanceTokenRegistry;
 }
 
 /** Build the demo API server. The returned server is not yet listening. */
@@ -82,6 +87,13 @@ async function handle(deps: AppDeps, req: IncomingMessage, res: ServerResponse):
   const url = new URL(req.url ?? '/', 'http://localhost');
   const segments = url.pathname.split('/').filter((s) => s !== '').map(decodeURIComponent);
   const method = req.method ?? 'GET';
+
+  // The dev-proxy SDK forward leg (#34, cli FR-5) rides its own protocol-pinned
+  // path, not under `/api`; it is dev-mode-only and 404s otherwise (see the handler).
+  if (url.pathname === DEV_PROXY_SDK_PATH) {
+    await handleDevProxy(deps, req, res, method);
+    return;
+  }
 
   if (segments[0] !== 'api') {
     sendJson(res, 404, { error: 'not_found' });
@@ -111,6 +123,18 @@ async function handle(deps: AppDeps, req: IncomingMessage, res: ServerResponse):
 
   if (segments[1] === 'sideload') {
     await handleSideload(deps, req, res, method, segments.slice(2), url);
+    return;
+  }
+
+  // The instance-token identity rail (SPEC §3, §6; FR-14).
+  if (segments[1] === 'sdk' && segments[2] === 'instance' && segments.length === 3) {
+    await handleSdkInstance(deps, req, res, method);
+    return;
+  }
+
+  // The capability-gated reference records endpoint, enforced through the rail.
+  if (segments[1] === 'records') {
+    await handleRecords(deps, req, res, method, segments.slice(2));
     return;
   }
 

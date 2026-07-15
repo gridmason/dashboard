@@ -24,6 +24,7 @@ import {
   ENFORCEMENT_ACK_TYPE,
   enforcementTableFrom,
 } from './enforcement-table';
+import { SESSION_TOKEN_MESSAGE_TYPE, type SessionTokenMessage } from './session-token';
 import type { MultihashString } from '@gridmason/protocol/verify';
 
 /** The built SW is emitted to the app root so it can claim scope `/` (vite.config.ts). */
@@ -113,6 +114,23 @@ async function handOffTable(urlHashes: ReadonlyMap<string, MultihashString>): Pr
     controller.postMessage(enforcementTableFrom(urlHashes).toMessage(), [channel.port2]);
     setTimeout(() => finish(false), ACK_TIMEOUT_MS);
   });
+}
+
+/**
+ * Hand the shell's session token to the controlling SW (FR-14), or clear it with
+ * `null`. Fire-and-forget over `postMessage` — the SW holds it in memory and
+ * attaches it to outbound API calls (`../../sw/federated-sw`); the token leaves the
+ * page here and is never stored in page-accessible JS. A no-op when no SW controls
+ * the page yet (the credential is re-handed once control lands). The caller passes a
+ * token obtained under the session it already established; this function keeps no
+ * reference to it beyond the post.
+ */
+export function handOffSessionToken(token: string | null): void {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  const controller = navigator.serviceWorker.controller;
+  if (controller === null) return;
+  const message: SessionTokenMessage = { type: SESSION_TOKEN_MESSAGE_TYPE, token };
+  controller.postMessage(message);
 }
 
 /**

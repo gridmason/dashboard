@@ -10,13 +10,28 @@ import type { DemoConfig } from '../config/index';
 import { LayoutStore, type LayoutDoc } from '../layout-store/index';
 import { GovernanceStore } from '../governance-store/index';
 import { SideloadRegistrationStore } from '../sideload-store/index';
+import { InstanceTokenRegistry } from '../sdk-identity/index';
 
 /** A two-user config matching the checked-in sample's shape. */
 export function makeConfig(): DemoConfig {
   return {
     users: [
-      { id: 'alice', username: 'alice', password: 'alice-dev-password', displayName: 'Alice Admin', roles: ['admin'] },
-      { id: 'bob', username: 'bob', password: 'bob-dev-password', displayName: 'Bob Member', roles: ['member'] },
+      {
+        id: 'alice',
+        username: 'alice',
+        password: 'alice-dev-password',
+        displayName: 'Alice Admin',
+        roles: ['admin'],
+        capabilities: ['records.read', 'records.write', 'net', 'events'],
+      },
+      {
+        id: 'bob',
+        username: 'bob',
+        password: 'bob-dev-password',
+        displayName: 'Bob Member',
+        roles: ['member'],
+        capabilities: ['records.read:recordType:customer', 'events:demo'],
+      },
     ],
     gates: { 'widgets.chart': true, 'widgets.crasher': false, 'governance.publish': true },
   };
@@ -45,20 +60,22 @@ export interface TestServer {
   readonly store: LayoutStore;
   readonly governance: GovernanceStore;
   readonly sideload: SideloadRegistrationStore;
+  readonly identity: InstanceTokenRegistry;
   close(): Promise<void>;
 }
 
 /**
  * Boot the demo API on an ephemeral port with in-memory stores. Returns the base
- * URL, the layout + governance + sideload stores (for direct assertions), and a
- * `close` teardown.
+ * URL, the layout + governance + sideload stores + instance-token registry (for
+ * direct assertions), and a `close` teardown.
  */
 export async function startTestServer(config: DemoConfig = makeConfig()): Promise<TestServer> {
   const store = new LayoutStore();
   const governance = new GovernanceStore();
   const sideload = new SideloadRegistrationStore();
   const auth = new AuthService(config);
-  const server = createApp({ config, store, governance, sideload, auth });
+  const identity = new InstanceTokenRegistry();
+  const server = createApp({ config, store, governance, sideload, auth, identity });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve));
   const { port } = server.address() as AddressInfo;
   return {
@@ -66,8 +83,15 @@ export async function startTestServer(config: DemoConfig = makeConfig()): Promis
     store,
     governance,
     sideload,
+    identity,
     close: () => new Promise<void>((resolve, reject) => server.close((err) => (err ? reject(err) : resolve()))),
   };
+}
+
+/** Parse a JSON response body for assertions (the test suites drive real HTTP). */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export async function readJson(res: Response): Promise<any> {
+  return res.json();
 }
 
 /** Log in and return the `Cookie` header value to authenticate later requests. */

@@ -16,6 +16,7 @@ import { loadConfig } from './config/index';
 import { LayoutStore } from './layout-store/index';
 import { GovernanceStore } from './governance-store/index';
 import { SideloadRegistrationStore } from './sideload-store/index';
+import { InstanceTokenRegistry } from './sdk-identity/index';
 
 const PORT = Number(process.env.PORT ?? 8787);
 const LAYOUT_STORE_PATH =
@@ -34,8 +35,9 @@ const store = new LayoutStore({ filePath: LAYOUT_STORE_PATH });
 const governance = new GovernanceStore({ filePath: GOVERNANCE_STORE_PATH });
 const sideload = new SideloadRegistrationStore({ filePath: SIDELOAD_STORE_PATH });
 const auth = new AuthService(config);
+const identity = new InstanceTokenRegistry();
 
-const server = createApp({ config, store, governance, sideload, auth });
+const server = createApp({ config, store, governance, sideload, auth, identity });
 server.listen(PORT, () => {
   process.stdout.write(`[demo-api] listening on http://localhost:${PORT}\n`);
 });

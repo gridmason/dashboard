@@ -5,14 +5,16 @@
       "username": "alice",
       "password": "alice-dev-password",
       "displayName": "Alice Admin",
-      "roles": ["admin"]
+      "roles": ["admin"],
+      "capabilities": ["records.read", "records.write", "net", "events"]
     },
     {
       "id": "bob",
       "username": "bob",
       "password": "bob-dev-password",
       "displayName": "Bob Member",
-      "roles": ["member"]
+      "roles": ["member"],
+      "capabilities": ["records.read:recordType:customer", "events:demo"]
     }
   ],
   "gates": {
