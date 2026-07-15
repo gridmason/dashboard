@@ -19,6 +19,11 @@ import type { LocalImportMap, LocalRemote } from '../boot/import-map';
 import { federatedHost } from '../boot/federated-host';
 import { useFederatedGeneration } from '../boot/FederatedBootProvider';
 import { ReferenceHostRegistry, toPageContext, demoDeclaredCapabilities } from '../host-sdk';
+import {
+  DashboardTelemetry,
+  resolveExporters,
+  WIDGET_LATENCY_BUDGET_MS,
+} from '../adapters/telemetry';
 import { useEditSession } from '../edit/edit-session';
 import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
 import { remountInstancesByTag, layoutWithoutInstances } from '../sideload/remount';
@@ -147,19 +152,48 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
   // installable. Read as an effect dependency below so the lazy-mount effect re-runs and
   // upgrades a federated widget from its fallback card to its real element (no reload).
   const federatedGeneration = useFederatedGeneration();
+  // One telemetry adapter per canvas host (SPEC §3, §7, FR-15): the sink every
+  // per-widget error/latency, canvas p95, and widget-reported mark flows through.
+  // Console exporter by default; OTLP added when `VITE_GM_OTLP_ENDPOINT` is set
+  // (`../adapters/telemetry`). It also owns the auto-degrade budget monitor's
+  // flagged set — the host-side flag core cannot hold (SPEC §1).
+  const telemetryRef = useRef<DashboardTelemetry>(null);
+  telemetryRef.current ??= new DashboardTelemetry({
+    exporters: resolveExporters({ otlpEndpoint: import.meta.env.VITE_GM_OTLP_ENDPOINT }),
+  });
+
   // One reference-host registry per canvas host: it owns this page's per-instance
   // enforcing handles, their stable identities across re-renders, and the
-  // host-mediated event bus shared across the page's mounts (`../host-sdk`).
+  // host-mediated event bus shared across the page's mounts (`../host-sdk`). Each
+  // mount's `sdk.telemetry` is stamped with its identity and routed to the adapter
+  // (FR-15) via `telemetryFor`.
   const registryRef = useRef<ReferenceHostRegistry>(null);
-  registryRef.current ??= new ReferenceHostRegistry();
+  registryRef.current ??= new ReferenceHostRegistry({
+    telemetryFor: (identity) => telemetryRef.current!.hostTelemetryFor(identity),
+  });
 
   useEffect(() => {
     const el = canvasRef.current;
     if (el === null || effective === undefined) return;
     const registry = registryRef.current!;
+    const telemetry = telemetryRef.current!;
     // New layout = all-new instances: drop the previous render's handles so a
-    // reused grid-item id mints a fresh identity rather than inheriting the old one.
+    // reused grid-item id mints a fresh identity rather than inheriting the old one,
+    // and clear the telemetry flagged set (SPEC §3) so a prior layout's degraded
+    // widget does not stay flagged under the new one.
     registry.reset();
+    telemetry.reset();
+
+    // Wire the telemetry + auto-degrade NFR contract (SPEC §3, §7, FR-15): the
+    // per-widget error/latency sink and the canvas p95 sink both flow to the
+    // adapter, and a widget that exceeds the per-widget latency budget is
+    // auto-degraded by core's boundary to its fallback card (the breach surfaces as
+    // a `widget.latency` `exceeded` event the adapter flags). Set before the layout
+    // so the first render's marks are captured.
+    el.telemetry = telemetry.widgetTelemetry;
+    el.perfTelemetry = telemetry.perfTelemetry;
+    el.latencyBudgetMs = WIDGET_LATENCY_BUDGET_MS;
+    el.autoDegradeOnLatency = true;
 
     const pageType = resolvePageType(page.pageType);
     const pageContext = buildPageContext(pageType, page.entityId);

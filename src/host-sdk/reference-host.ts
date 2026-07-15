@@ -62,6 +62,7 @@ import {
 } from './capabilities';
 import { HostEventBus } from './event-bus';
 import type { OutboundTransport } from './transport';
+import type { HostInstanceTelemetry } from '../adapters/telemetry';
 
 /**
  * The remote-identity binding the host stamped on the most recent allowed
@@ -99,6 +100,13 @@ export interface ReferenceMountInput {
   readonly context?: PageContext;
   /** Initial settings `settings.get()` returns. */
   readonly settings?: WidgetSettings;
+  /**
+   * The identity-stamped telemetry sink this mount's `sdk.telemetry` forwards to
+   * (SPEC §3, FR-15). Already bound to this mount's `(instanceId, widgetId)` by
+   * the host, so a widget's `mark`/`error` reach the adapter attributed. Omitted =
+   * the no-op default (telemetry accepted and dropped, as in the interim handle).
+   */
+  readonly telemetry?: HostInstanceTelemetry;
   /** Called after the token is revoked on unmount — lets the shell tear down server-side state. */
   readonly onUnmount?: (instanceId: string) => void;
 }
@@ -220,11 +228,15 @@ export function createReferenceMount(input: ReferenceMountInput): ReferenceMount
       },
     },
     telemetry: {
-      error(_e: WidgetError): void {
+      error(e: WidgetError): void {
         // Ungated + never throws: telemetry must survive teardown so an unmount
-        // error can still be reported.
+        // error can still be reported. Forward to the identity-stamped host sink
+        // (FR-15) when one is wired; otherwise drop (no-op default).
+        input.telemetry?.error(e);
       },
-      mark(_name: string, _ms: number): void {},
+      mark(name: string, ms: number): void {
+        input.telemetry?.mark(name, ms);
+      },
     },
     identity: { instanceId, widgetId },
   };

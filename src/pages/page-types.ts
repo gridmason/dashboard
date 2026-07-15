@@ -1,5 +1,5 @@
 /**
- * The four demo page types, as **data** (docs/SPEC.md §5, FR-2).
+ * The five demo page types, as **data** (docs/SPEC.md §5, FR-2).
  *
  * A page type is a descriptor — a typed context, a default layout, its locked
  * slots, and whether users may customize it — *not* a component. There is no
@@ -17,7 +17,7 @@
  * `locks` as the default level's locks.
  *
  * Every layout places the first-party demo widgets (`../boot/import-map`
- * `WIDGET_TAGS`) so the four page types together showcase the whole widget ABI
+ * `WIDGET_TAGS`) so the demo page types together showcase the whole widget ABI
  * (SPEC §5): static clock/markdown, the context-consuming record-summary, the
  * schema-validated chart, and the deliberate crasher that proves the per-widget
  * error boundary.
@@ -45,7 +45,7 @@ type PlacedWidget = Omit<LayoutWidget, 'widgetID'>;
 
 /**
  * Place one first-party demo widget (`tag`) into a grid: attach its `local`
- * source-qualified identity to the geometry/props/slot. The five demo widget tags
+ * source-qualified identity to the geometry/props/slot. The demo widget tags
  * come from the import map (`WIDGET_TAGS`), so a placement and its registered
  * remote can never drift.
  */
@@ -87,7 +87,7 @@ interface DemoPageTypeInput {
 }
 
 /**
- * The four demo page types (SPEC §5):
+ * The five demo page types (SPEC §5):
  *
  * - `dashboards.home` — a free canvas grid: no typed context, no locks, users
  *   customize freely.
@@ -95,6 +95,9 @@ interface DemoPageTypeInput {
  *   with a **locked header slot** pinned above a customizable body.
  * - `demo.locked` — a fully locked page: `allow_user_customization: false` and
  *   every slot locked, so nothing moves.
+ * - `demo.telemetry` — the telemetry + auto-degrade showcase (FR-15): healthy
+ *   widgets beside the crasher (error degrade) and the laggard (latency-budget
+ *   degrade), each degrade attributed to its instance.
  * - `demo.full-canvas` — one maximized, locked widget spanning the grid. An
  *   ordinary page type, not special-cased — the no-special-case proof.
  */
@@ -257,6 +260,59 @@ const DEMO_PAGE_TYPES: readonly DemoPageTypeInput[] = [
         w: 12,
         h: 2,
         props: { label: 'Server time', format: '24h', showSeconds: true, timeZone: 'UTC' },
+      }),
+    ],
+  },
+  {
+    id: 'demo.telemetry',
+    context: {},
+    allow_user_customization: true,
+    layoutName: 'Telemetry & auto-degrade',
+    // The FR-15 showcase: two healthy widgets alongside the two degrade demos — the
+    // crasher (an *error* degrade, boundary trips on mount) and the laggard (a
+    // *latency-budget* degrade: declares pending, never becomes interactive, so the
+    // canvas auto-degrades it to its fallback and the adapter flags it). Both
+    // degrades are attributed to their instance via the telemetry adapter (SPEC §3).
+    items: [
+      widget(WIDGET_TAGS.clock, {
+        i: 'clock',
+        x: 0,
+        y: 0,
+        w: 3,
+        h: 2,
+        props: { label: 'Local time', format: '24h', showSeconds: true },
+      }),
+      widget(WIDGET_TAGS.chart, {
+        i: 'chart',
+        x: 3,
+        y: 0,
+        w: 5,
+        h: 3,
+        props: {
+          label: 'Latency',
+          title: 'Widget latency (ms)',
+          kind: 'bar',
+          series: [
+            { label: 'clock', value: 4 },
+            { label: 'chart', value: 11 },
+            { label: 'slow', value: 1500 },
+          ],
+        },
+      }),
+      widget(WIDGET_TAGS.laggard, {
+        i: 'laggard',
+        x: 0,
+        y: 2,
+        w: 4,
+        h: 3,
+      }),
+      widget(WIDGET_TAGS.crasher, {
+        i: 'crasher',
+        x: 4,
+        y: 3,
+        w: 4,
+        h: 2,
+        props: { label: 'Broken widget', message: 'Deliberate demo crash on mount' },
       }),
     ],
   },

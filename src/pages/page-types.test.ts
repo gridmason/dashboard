@@ -13,11 +13,12 @@ function items(id: string) {
 }
 
 describe('demo page types (FR-2, SPEC §5)', () => {
-  it('registers exactly the four demo page types', () => {
+  it('registers exactly the five demo page types', () => {
     expect(listPageTypes().map((p) => p.descriptor.id)).toEqual([
       'dashboards.home',
       'demo.record-detail',
       'demo.locked',
+      'demo.telemetry',
       'demo.full-canvas',
     ]);
   });
