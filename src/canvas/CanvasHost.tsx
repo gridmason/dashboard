@@ -16,6 +16,8 @@ import { resolvePageType } from '../pages/page-types';
 import { buildPageContext } from '../pages/context';
 import { assembleImportMap, describeWidget, loadWidgetsForLayout } from '../boot/import-map';
 import type { LocalImportMap, LocalRemote } from '../boot/import-map';
+import { federatedHost } from '../boot/federated-host';
+import { useFederatedGeneration } from '../boot/FederatedBootProvider';
 import { InterimHandleRegistry, toPageContext, demoHostData } from '../host-sdk';
 import { useEditSession } from '../edit/edit-session';
 import { acknowledgedSideloadHost, sideloadHost, subscribeDevReload } from '../sideload/host-seam';
@@ -53,20 +55,24 @@ function indexWidgetIds(layout: LayoutPage): ReadonlyMap<string, WidgetID> {
 }
 
 /**
- * The active import map for a render: the shell's local remotes, plus the
- * acknowledged-sideload remotes (SPEC §4, FR-8 — prod-safe, merged on every build)
- * and, in a **development build** with the dev gate active, the admitted
- * dev-sideload remotes (FR-7). Every sideloaded remote is merged in by tag so it
- * rides the exact same lazy-`import()` mount path as a first-party one — an
- * acknowledged remote's loader additionally verifies its content hash before the
- * module runs ({@link acknowledgedRemote}). In a production build
+ * The active import map for a render: the shell's local remotes, plus the **verified
+ * federated** remotes (SPEC §2, FR-10 — prod-safe, resolved + verified by the
+ * federated boot), the acknowledged-sideload remotes (SPEC §4, FR-8 — prod-safe,
+ * merged on every build) and, in a **development build** with the dev gate active,
+ * the admitted dev-sideload remotes (FR-7). Every remote is merged in by tag so it
+ * rides the exact same lazy-`import()` mount path as a first-party one — a federated
+ * remote's `load` imports a URL whose release was verified before it entered the map
+ * ({@link federatedRemote}), and an acknowledged remote's loader verifies its content
+ * hash before the module runs ({@link acknowledgedRemote}). In a production build
  * `import.meta.env.DEV` is a static `false`, so the dev seam is never referenced.
  */
 function activeImportMap(): LocalImportMap {
+  const federated = federatedHost();
   const acknowledged = acknowledgedSideloadHost();
   const dev = import.meta.env.DEV ? sideloadHost() : null;
-  if (acknowledged === null && dev === null) return importMap;
+  if (federated === null && acknowledged === null && dev === null) return importMap;
   const merged = new Map(importMap);
+  if (federated !== null) for (const remote of federated.remotes()) merged.set(remote.tag, remote);
   if (acknowledged !== null) for (const remote of acknowledged.remotes()) merged.set(remote.tag, remote);
   if (dev !== null) for (const remote of dev.remotes()) merged.set(remote.tag, remote);
   return merged;
@@ -135,6 +141,11 @@ function matchSideloadRemote(
  */
 export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
   const { canvasRef, effective } = useEditSession();
+  // The federated-boot generation (FR-10): the async boot resolves + verifies remotes
+  // after the first render, so this token flips when verified federated remotes become
+  // installable. Read as an effect dependency below so the lazy-mount effect re-runs and
+  // upgrades a federated widget from its fallback card to its real element (no reload).
+  const federatedGeneration = useFederatedGeneration();
   // One interim-handle registry per canvas host: it owns this page's per-instance
   // handles and their stable identities across re-renders (`../host-sdk/registry`).
   const registryRef = useRef<InterimHandleRegistry>(null);
@@ -162,6 +173,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
     // be installed yet when this effect first runs.
     el.widgetDescriptor = (identity) =>
       describeWidget(identity) ??
+      federatedHost()?.describe(identity.widgetID) ??
       acknowledgedSideloadHost()?.describe(identity.widgetID) ??
       (import.meta.env.DEV ? sideloadHost()?.describe(identity.widgetID) : undefined);
 
@@ -262,7 +274,7 @@ export function CanvasHost({ page }: { page: PageRef }): React.JSX.Element {
       el.removeEventListener(CANVAS_WIDGET_MOUNTED_EVENT, onWidgetMounted);
       registry.reset();
     };
-  }, [canvasRef, effective, page.pageType, page.entityId]);
+  }, [canvasRef, effective, page.pageType, page.entityId, federatedGeneration]);
 
   // Dev hot-reload (SPEC §4, FR-7, issue #41): when an admitted `gridmason dev`
   // origin re-serves its widget, the dev provider re-imports the entry and
