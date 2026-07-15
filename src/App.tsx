@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { Route, Switch } from 'wouter';
+import { Route, Router, Switch } from 'wouter';
 import { AppShell } from './AppShell';
 import { CanvasHost } from './canvas/CanvasHost';
 import { EditSessionProvider } from './edit/edit-session';
@@ -46,22 +46,32 @@ function PageView(params: { pageType?: string; entityId?: string }): React.JSX.E
  * code there and drops the entire dev `./sideload` subtree from the bundle — dev
  * sideload is unavailable in production (`production-gate.test.ts`, `sideload-gate`
  * e2e), while acknowledged sideload stays available.
+ *
+ * All routes are scoped to the deploy's base path via wouter's {@link Router}
+ * `base`, read from Vite's `import.meta.env.BASE_URL` (the build's `base`, e.g.
+ * `/demo/` for GitHub Pages subpath hosting). It is `/` — an empty base, i.e. the
+ * root — for a normal build, so this is a no-op there and only takes effect when a
+ * subpath build sets it.
  */
 export function App(): React.JSX.Element {
+  // `/demo/` → `/demo`; `/` → `` (root). wouter matches paths after this prefix.
+  const routerBase = import.meta.env.BASE_URL.replace(/\/+$/, '');
   return (
     <FederatedBootProvider>
       <AcknowledgedSideloadProvider>
         {withDevSideload(
-          <Switch>
-            <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
-            <Route path={ROUTES.pageEntity}>
-              {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
-            </Route>
-            <Route path={ROUTES.page}>
-              {(params) => <PageView pageType={params.pageType} />}
-            </Route>
-            <Route>{() => <PageView />}</Route>
-          </Switch>,
+          <Router base={routerBase}>
+            <Switch>
+              <Route path={ROUTES.governance}>{() => <GovernanceView />}</Route>
+              <Route path={ROUTES.pageEntity}>
+                {(params) => <PageView pageType={params.pageType} entityId={params.entityId} />}
+              </Route>
+              <Route path={ROUTES.page}>
+                {(params) => <PageView pageType={params.pageType} />}
+              </Route>
+              <Route>{() => <PageView />}</Route>
+            </Switch>
+          </Router>,
         )}
       </AcknowledgedSideloadProvider>
     </FederatedBootProvider>

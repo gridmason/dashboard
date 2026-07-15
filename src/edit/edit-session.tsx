@@ -43,17 +43,18 @@ import type { PageRef } from '../routes';
 import type { GmPageCanvasElement } from '../canvas/gm-page-canvas';
 import { resolvePageType, type DemoPageType } from '../pages/page-types';
 import { assembleImportMap, loadWidgetsForLayout } from '../boot/import-map';
-import { ApiLayoutPersistence, type LayoutPersistenceAdapter } from '../adapters/persistence';
-import { ApiGovernance, type GovernanceAdapter, type OrgPublication } from '../adapters/governance';
-import { ensureSession } from '../adapters/session/session-client';
+import type { LayoutPersistenceAdapter } from '../adapters/persistence';
+import type { GovernanceAdapter, OrgPublication } from '../adapters/governance';
+import { sessionBackend } from '../adapters/backend';
 import { BufferedLayoutPersistence } from './buffered-persistence';
 
 /**
- * Base URL the demo API is reached at. Empty means same-origin: the dev server
- * and the preview both proxy `/api` to the demo API (see vite.config.ts), so the
- * ambient `HttpOnly` session cookie authenticates every call.
+ * The data backend for this build target (`../adapters/backend`): the API-backed
+ * reference set, or the static-demo `localStorage` set for the serverless build.
+ * Resolved once — the choice is a build-time flag, and neither implementation has
+ * construction side effects.
  */
-const DEMO_API_BASE = '';
+const backend = sessionBackend();
 
 /** The org scope-node the demo publishes an org layout under (SPEC §5). */
 const ORG_NODE = 'org';
@@ -262,10 +263,10 @@ export function EditSessionProvider({
 
     void (async () => {
       try {
-        const user = await ensureSession(DEMO_API_BASE);
+        const user = await backend.ensureSession();
         if (epochRef.current !== epoch) return;
-        adapterRef.current = new ApiLayoutPersistence({ userId: user.id, baseUrl: DEMO_API_BASE });
-        governanceRef.current = new ApiGovernance({ userId: user.id, baseUrl: DEMO_API_BASE });
+        adapterRef.current = backend.createLayoutPersistence(user.id);
+        governanceRef.current = backend.createGovernance(user.id);
         // The role stub (SPEC §6): only a publisher may publish an org layout.
         setCanPublish(user.roles.includes(PUBLISHER_ROLE));
         await resolveAndBind(epoch);

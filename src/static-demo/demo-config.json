@@ -1,0 +1,22 @@
+{
+  "currentUser": "alice",
+  "users": [
+    {
+      "id": "alice",
+      "username": "alice",
+      "displayName": "Alice Admin",
+      "roles": ["admin"]
+    },
+    {
+      "id": "bob",
+      "username": "bob",
+      "displayName": "Bob Member",
+      "roles": ["member"]
+    }
+  ],
+  "gates": {
+    "widgets.chart": true,
+    "widgets.crasher": false,
+    "governance.publish": true
+  }
+}
