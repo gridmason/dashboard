@@ -15,6 +15,7 @@ playwright-report/
 test-results/
 blob-report/
 .lighthouseci/
+.playwright-mcp/
 
 # logs
 npm-debug.log*

@@ -37,9 +37,11 @@ npm run dev            # Vite dev server at http://localhost:5173
 |---|---|
 | `npm run dev` | Start the Vite dev server. |
 | `npm run build` | Type-check (`tsc --noEmit`) then build the static bundle to `dist/`. |
+| `npm run build:static-demo` | Build the **serverless** static-demo bundle (no demo API — see [Static demo build](#static-demo-build)). |
 | `npm run preview` | Serve the built `dist/` bundle (port 4173). |
 | `npm run typecheck` | Type-check only. |
 | `npm run e2e` | Run the Playwright suite. Run `npm run build` first — the suite serves the built bundle. |
+| `npm run e2e:static-demo` | Build the static-demo bundle and run its Playwright suite against a plain static server. |
 | `npm run e2e:install` | Install the Playwright browser (Chromium) with OS deps. |
 | `npm run lighthouse` | Run the Lighthouse CI perf pass over the built bundle. |
 | `npm test` | Run unit tests (Vitest) — app source and the demo API. |
@@ -114,6 +116,71 @@ are folded into the reported policy; for the production nginx image, add the sam
 origins to the header in `docker/nginx.conf`. The full mechanism, including
 acknowledged-sideload origins and connect-only origins, is documented in
 [`docs/csp.md`](docs/csp.md#federating-a-registry).
+
+## Static demo build
+
+`npm run build:static-demo` produces a **fully serverless** bundle — the same app
+and the same first-party demo widgets, but with **no demo API**. It is the target
+for a public showcase on a static host such as GitHub Pages (the `gridmason.dev/demo`
+site), where there is no server to run.
+
+```bash
+npm run build:static-demo                 # → dist/  (serverless, base "/")
+BASE_PATH=/demo/ npm run build:static-demo # → dist/  for subpath hosting at /demo
+```
+
+What the static-demo build swaps in (all through the sanctioned adapter seam,
+`src/adapters/backend.ts` — the app above it is unchanged):
+
+- **Layout persistence → `localStorage`** ([`LocalLayoutPersistence`](src/adapters/persistence/local-layout-persistence.ts)),
+  keyed exactly as the API store is, so **copy-on-write is preserved**: an edit
+  forks the user's `user:<id>` override, Save persists it, reload restores it, and
+  Reset removes only the override — the page-type default is never mutated.
+  Governance (org publish/unpublish) is `localStorage`-backed too
+  ([`LocalGovernance`](src/adapters/governance/local-governance.ts)).
+- **Login → a fixed demo user** ([`static-session.ts`](src/adapters/session/static-session.ts))
+  baked from static JSON ([`src/static-demo/demo-config.json`](src/static-demo/demo-config.json)) —
+  no stub-login endpoint. The baked file also carries the demo's role/gate posture.
+- **Widgets → the first-party demo widgets** from the local import map (the Phase-A
+  static boot path). **Sideload stays off** and federated boot is inert, so the
+  build makes **zero network calls** to any API.
+
+Because the flag (`GRIDMASON_STATIC_DEMO`) is a build-time constant, the unused
+backend is tree-shaken out — the static bundle contains no `fetch`-based adapter.
+
+### Base path
+
+`BASE_PATH` sets Vite's `base` (asset URLs) and, through `import.meta.env.BASE_URL`,
+the client router's base (wouter), so both assets and routes resolve under a
+subpath like `/demo`. Serve a subpath build with the same value set, e.g.
+`BASE_PATH=/demo/ npm run preview:static-demo`.
+
+### CSP on a header-less static host
+
+A static host (GitHub Pages) cannot send response headers, so it cannot serve the
+enforced `Content-Security-Policy` header `docker/nginx.conf` uses. The static-demo
+build therefore injects the **same** policy as a `<meta http-equiv="Content-Security-Policy">`
+tag — built from the single source of truth ([`src/security/production-csp.ts`](src/security/production-csp.ts)) —
+with **one documented delta**: `frame-ancestors` is omitted, because browsers ignore
+it in a `<meta>` tag. That directive is the only part of the policy a header-less
+host cannot express; a host that can send even one header should add
+`X-Frame-Options: DENY` to restore the no-framing guarantee. See
+[`docs/csp.md`](docs/csp.md#static-hosting-without-header-control).
+
+The build also emits a `404.html` copy of the app shell so Pages serves client-routed
+deep links (the static-host analog of nginx's `try_files … /index.html`).
+
+### The demo widgets as documentation examples
+
+The five first-party widgets the demo renders double as **worked examples** of the
+widget ABI — each is a small, framework-agnostic custom element, themed only through
+CSS custom properties:
+
+- **Clock** — the minimal static-props shape: [`src/widgets/clock/clock.ts`](src/widgets/clock/clock.ts) (+ [`format.ts`](src/widgets/clock/format.ts))
+- **Markdown** — static props + a safe, escape-first renderer: [`src/widgets/markdown/markdown.ts`](src/widgets/markdown/markdown.ts) (+ [`render.ts`](src/widgets/markdown/render.ts))
+- **Record summary** — a context-consuming widget (typed `record-ref`): [`src/widgets/record-summary/record-summary.ts`](src/widgets/record-summary/record-summary.ts) (+ [`record.ts`](src/widgets/record-summary/record.ts))
+- **Chart** — schema-validated props + themed SVG marks: [`src/widgets/chart/chart.ts`](src/widgets/chart/chart.ts) (+ [`schema.ts`](src/widgets/chart/schema.ts), [`geometry.ts`](src/widgets/chart/geometry.ts))
+- **Crasher** — a deliberate throw-on-mount that proves the per-widget error boundary: [`src/widgets/crasher/crasher.ts`](src/widgets/crasher/crasher.ts)
 
 ## Demo API (reference adapters)
 

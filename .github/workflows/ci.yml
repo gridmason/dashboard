@@ -78,6 +78,28 @@ jobs:
           path: playwright-report
           if-no-files-found: ignore
 
+  # Static-demo (serverless) build (issue #78): build the GitHub-Pages target and
+  # smoke it against a plain static server — the demo pages render from the local
+  # import map and a layout edit persists in localStorage, all with no demo API.
+  static-demo:
+    name: Static demo (serverless) e2e
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - run: npm run e2e:static-demo
+      - uses: actions/upload-artifact@v4
+        if: ${{ !cancelled() }}
+        with:
+          name: playwright-report-static-demo
+          path: playwright-report
+          if-no-files-found: ignore
+
   # Demo API service (FR-5, FR-6): type-check the server and run its suites. The
   # api tests boot the service on an ephemeral port, so this job also proves the
   # service starts in CI. Vitest-only — no browser needed.

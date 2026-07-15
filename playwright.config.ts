@@ -55,6 +55,9 @@ export default defineConfig({
         '**/sideload-dev-import-scope.spec.ts',
         '**/sideload-acknowledged.spec.ts',
         '**/real-cli/**',
+        // The static-demo surface has its own config (playwright.static-demo.config.ts):
+        // it serves the serverless build with no demo API, so it must not run here.
+        '**/static-demo/**',
       ],
       use: { ...devices['Desktop Chrome'], baseURL: `http://localhost:${PREVIEW_PORT}` },
     },

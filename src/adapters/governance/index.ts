@@ -1,6 +1,7 @@
 /**
- * The reference governance adapter (docs/SPEC.md §5/§6, FR-4). See
- * {@link ApiGovernance} for the API-backed org-publication store and
+ * The reference governance adapters (docs/SPEC.md §5/§6, FR-4). See
+ * {@link ApiGovernance} for the API-backed org-publication store,
+ * {@link LocalGovernance} for the `localStorage`-backed static-demo store, and
  * {@link GovernanceAdapter} for the interface a host implements.
  */
 export { ApiGovernance, GovernanceError } from './api-governance';
@@ -9,3 +10,5 @@ export type {
   GovernanceAdapter,
   OrgPublication,
 } from './api-governance';
+export { LocalGovernance, DEFAULT_GOVERNANCE_NAMESPACE } from './local-governance';
+export type { LocalGovernanceOptions } from './local-governance';

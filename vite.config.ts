@@ -4,6 +4,7 @@ import react from '@vitejs/plugin-react';
 import { devSideloadCsp, isDevSideloadGateEnabled } from './vite/dev-sideload-csp';
 import { SIDELOAD_IMPORT_MAP, devSideloadImportScope } from './vite/dev-sideload-import-scope';
 import { productionCsp } from './vite/production-csp';
+import { staticDemo } from './vite/static-demo';
 
 // The demo API (server/) the persistence adapter talks to. Dev and preview both
 // proxy `/api` to it so the SPA and the API are same-origin — the `HttpOnly`
@@ -20,6 +21,16 @@ const apiProxy = { '/api': { target: DEMO_API_TARGET, changeOrigin: true } };
 // `off` client-side; this only forwards the raw string.
 const SIDELOAD_MODE = process.env.GRIDMASON_SIDELOAD_MODE ?? 'off';
 
+// Whether this is the static-demo (serverless) build (issue #78) — baked into the
+// bundle as a define so the composition seam (`src/adapters/backend.ts`) selects
+// the browser-only adapters. Unset builds are the server-backed default.
+const STATIC_DEMO = process.env.GRIDMASON_STATIC_DEMO === '1';
+
+// The public base path assets and routes are served under. Defaults to `/` (root);
+// a subpath deploy (e.g. GitHub Pages at `/demo`) sets `BASE_PATH=/demo/`. It flows
+// to asset URLs (Vite) and to the client router (wouter reads `import.meta.env.BASE_URL`).
+const BASE_PATH = process.env.BASE_PATH ?? '/';
+
 // Static bundle is emitted to dist/ and served from the app image (Dockerfile)
 // or any static host (FR-17). Absolute base: this is a client-routed SPA, so
 // deep links (/p/:pageType/:entityId) must load assets from an absolute path,
@@ -34,11 +45,12 @@ export default defineConfig({
   // `productionCsp` reports the enforced production policy (report-only) on the
   // preview server so the e2e report-only run can validate it against the real
   // built bundle; it is inert for `vite dev` and `vite build` (preview-only hook).
-  plugins: [react(), devSideloadCsp(), devSideloadImportScope(), productionCsp()],
+  plugins: [react(), devSideloadCsp(), devSideloadImportScope(), productionCsp(), staticDemo()],
   define: {
     __GM_SIDELOAD_MODE__: JSON.stringify(SIDELOAD_MODE),
+    __GM_STATIC_DEMO__: JSON.stringify(STATIC_DEMO),
   },
-  base: '/',
+  base: BASE_PATH,
   // When the dev-sideload gate is on, force-bundle the `@gridmason/*` modules the
   // import scope maps (`dev-sideload-import-scope.ts`). A sideloaded widget imports
   // these only at runtime, and the app itself imports `@gridmason/sdk` (root) only

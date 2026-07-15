@@ -85,3 +85,9 @@ headers may instead render most of the policy as a document `<meta>` tag:
 Caveat: a `<meta>` CSP **cannot** express `frame-ancestors` (browsers ignore it in
 meta) and cannot be report-only. Pair it with an `X-Frame-Options: DENY` header (or
 a host that supports the CSP header) to keep the no-framing guarantee.
+
+The **static-demo build** (`npm run build:static-demo`, for header-less hosts like
+GitHub Pages) does exactly this automatically: it injects the enforced policy as the
+`<meta>` tag above — built from the same `buildProductionCspHeader` source of truth,
+minus `frame-ancestors` — via `vite/static-demo.ts`. See the README's
+[Static demo build](../README.md#static-demo-build) section.
