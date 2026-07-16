@@ -89,6 +89,19 @@ export function useFederatedGeneration(): number {
   return useContext(FederatedBootContext);
 }
 
+/**
+ * The deployment's effective federated config (the registries it federates), or
+ * `null` when none is configured. Exposed for the Add Widget picker (#85), which
+ * enumerates the registered registries to browse their catalogs; the boot's
+ * **admitted** set (what may actually be placed) stays behind `federatedHost()`.
+ */
+const FederatedConfigContext = createContext<FederatedRegistryConfig | null>(null);
+
+/** The deployment's effective federated config, or `null` — `null` outside a provider. */
+export function useFederatedConfig(): FederatedRegistryConfig | null {
+  return useContext(FederatedConfigContext);
+}
+
 export function FederatedBootProvider({
   children,
   config,
@@ -197,9 +210,11 @@ export function FederatedBootProvider({
   }, [effectiveConfig, deps]);
 
   return (
-    <FederatedBootContext.Provider value={generation}>
-      {configError !== null ? <FederatedConfigErrorBanner message={configError} /> : null}
-      {children}
-    </FederatedBootContext.Provider>
+    <FederatedConfigContext.Provider value={effectiveConfig}>
+      <FederatedBootContext.Provider value={generation}>
+        {configError !== null ? <FederatedConfigErrorBanner message={configError} /> : null}
+        {children}
+      </FederatedBootContext.Provider>
+    </FederatedConfigContext.Provider>
   );
 }
