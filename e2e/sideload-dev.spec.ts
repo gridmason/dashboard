@@ -39,12 +39,12 @@ test('a gridmason dev widget hot-loads with a badge, re-serves, and is gone afte
   // Register the dev-server origin — its widget appears as a picker entry, badged.
   await picker.getByLabel('Dev server origin').fill(DEV_ORIGIN);
   await picker.getByRole('button', { name: 'Register' }).click();
-  const card = picker.locator('.gm-sl-card', { hasText: 'Field Notes' });
+  const card = picker.locator('.gm-picker-card-wrap', { hasText: 'Field Notes' });
   await expect(card).toBeVisible();
   await expect(card.locator('.gm-sideload-badge')).toBeVisible();
 
   // Place it — the dev remote hot-loads onto the governed canvas.
-  await card.click();
+  await card.locator('.gm-picker-card').click();
   await expect(picker).toBeHidden();
   await expect(canvas.getByTestId('dev-note')).toHaveText('Field Notes v1');
 

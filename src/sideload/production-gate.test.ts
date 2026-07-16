@@ -25,11 +25,11 @@ const repoRoot = fileURLToPath(new URL('../../', import.meta.url));
 
 // Strings that exist only in the dev-sideload UI / styling — never in shared code.
 const DEV_ONLY_SENTINELS = [
-  'enable dev sideload', // owner-acknowledgement button (AddWidgetPicker)
-  'No dev remotes admitted this session', // empty-state copy (AddWidgetPicker)
-  'gridmason dev origin', // register-origin placeholder (AddWidgetPicker)
+  'enable dev sideload', // owner-acknowledgement button (DevSideloadSection)
+  'No dev remotes admitted this session', // empty-state copy (DevSideloadSection)
+  'gridmason dev origin', // register-origin placeholder (DevSideloadSection)
   'gm-sideload-badge', // canvas card badge class (sideload.css / CanvasHost)
-  'gm-sl-scrim', // picker modal class (sideload.css)
+  'gm-devsl', // dev-sideload section wrapper class (DevSideloadSection)
 ];
 
 let outDir: string;
@@ -66,13 +66,23 @@ afterAll(() => {
   if (outDir !== undefined) rmSync(outDir, { recursive: true, force: true });
 });
 
+// The prod-safe Add Widget picker (issue #85) MUST ship in production — the check
+// above must not pass by accidentally dropping the whole picker with the dev subtree.
+const PROD_PICKER_SENTINELS = [
+  'gm-picker-scrim', // the picker modal (add-widget-picker.css)
+  'First-party widgets', // the local section copy (AddWidgetPicker)
+];
+
 describe('production build gate', () => {
   it(
-    'drops the dev-sideload path from the production bundle',
+    'drops the dev-sideload path from the production bundle but keeps the prod picker',
     () => {
       const assets = readAllAssets(buildProduction());
       for (const sentinel of DEV_ONLY_SENTINELS) {
         expect(assets, `production bundle must not contain "${sentinel}"`).not.toContain(sentinel);
+      }
+      for (const sentinel of PROD_PICKER_SENTINELS) {
+        expect(assets, `production bundle must contain "${sentinel}"`).toContain(sentinel);
       }
     },
     120_000,

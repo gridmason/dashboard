@@ -42,14 +42,14 @@ test('a scaffold-style widget importing @gridmason/* by bare specifier hot-loads
   // Register the dev-server origin — its widget appears as a badged picker entry.
   await picker.getByLabel('Dev server origin').fill(DEV_ORIGIN);
   await picker.getByRole('button', { name: 'Register', exact: true }).click();
-  const card = picker.locator('.gm-sl-card', { hasText: 'SDK Note' });
+  const card = picker.locator('.gm-picker-card-wrap', { hasText: 'SDK Note' });
   await expect(card).toBeVisible();
   await expect(card.locator('.gm-sideload-badge')).toBeVisible();
 
   // Place it — the bare-specifier entry resolves `@gridmason/*` through the injected
   // import map and mounts. `SDK import ok` proves both imports resolved to the real
   // runtime exports.
-  await card.click();
+  await card.locator('.gm-picker-card').click();
   await expect(picker).toBeHidden();
   await expect(canvas.getByTestId('sdk-note')).toHaveText('SDK import ok');
 

@@ -1,0 +1,325 @@
+/*
+ * Add Widget picker styling (issue #85; mockup 03-add-widget-picker.html) — the
+ * **prod-safe** picker surface. Unlike the dev-sideload styles (`../sideload/sideload.css`,
+ * injected only by the dev-only provider), these classes (`gm-picker-*`) are a
+ * normal side-effect import, so they ship in every build — the picker's local +
+ * registry + acknowledged sections render in production.
+ *
+ * Theme tokens only (`--gm-*`), so the picker re-themes with the shell.
+ */
+
+/* Edit-toolbar opener button. */
+.gm-picker-addbtn {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: 1px solid var(--gm-line);
+  border-radius: 8px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.gm-picker-addbtn:hover {
+  border-color: var(--gm-copper);
+  color: var(--gm-copper);
+}
+
+/* Modal scrim + sheet. */
+.gm-picker-scrim {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 15, 10, 0.34);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 40px 20px;
+  z-index: 1000;
+}
+.gm-picker-sheet {
+  width: min(760px, 100%);
+  background: var(--gm-paper);
+  border: 1px solid var(--gm-line);
+  border-radius: 14px;
+  box-shadow: 0 30px 80px rgba(0, 0, 0, 0.35);
+  overflow: hidden;
+  color: var(--gm-ink);
+}
+.gm-picker-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--gm-line);
+  background: var(--gm-paper-2);
+}
+.gm-picker-head h2 {
+  font-size: 18px;
+  margin: 0;
+  font-weight: 600;
+}
+.gm-picker-ctx {
+  font-family: var(--gm-font-mono);
+  font-size: 10.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--gm-ink-soft);
+  border: 1px solid var(--gm-line);
+  border-radius: 999px;
+  padding: 4px 10px;
+  background: var(--gm-card);
+}
+.gm-picker-ctx b {
+  color: var(--gm-copper);
+}
+.gm-picker-spacer {
+  flex: 1;
+}
+.gm-picker-close {
+  width: 30px;
+  height: 30px;
+  border: 1px solid var(--gm-line);
+  border-radius: 7px;
+  background: var(--gm-card);
+  cursor: pointer;
+  color: var(--gm-ink-soft);
+  font-size: 15px;
+}
+.gm-picker-body {
+  padding: 18px 20px;
+  max-height: 66vh;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Section divider label. */
+.gm-picker-section {
+  font-family: var(--gm-font-mono);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--gm-copper);
+  padding-top: 4px;
+  border-top: 1px dashed var(--gm-line);
+}
+.gm-picker-section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+/* Registry search box. */
+.gm-picker-search {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gm-picker-search input {
+  flex: 1;
+  padding: 8px 12px;
+  border: 1px solid var(--gm-line);
+  border-radius: 8px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  font: inherit;
+  font-size: 14px;
+}
+
+/* Entry-card grid. */
+.gm-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
+.gm-picker-card-wrap {
+  position: relative;
+  display: flex;
+}
+.gm-picker-card {
+  flex: 1;
+  border: 1px solid var(--gm-line);
+  border-radius: 11px;
+  background: var(--gm-card);
+  padding: 13px 14px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  text-align: left;
+  font: inherit;
+  color: var(--gm-ink);
+}
+.gm-picker-card:hover:not(:disabled) {
+  border-color: var(--gm-copper);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+}
+.gm-picker-card:disabled {
+  cursor: not-allowed;
+  opacity: 0.66;
+}
+.gm-picker-cn {
+  font-size: 14px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.gm-picker-cs {
+  font-family: var(--gm-font-mono);
+  font-size: 9.5px;
+  color: var(--gm-ink-soft);
+  overflow-wrap: anywhere;
+}
+.gm-picker-cd {
+  font-size: 12px;
+  color: var(--gm-ink-soft);
+  line-height: 1.4;
+}
+.gm-picker-note {
+  font-size: 11.5px;
+  color: var(--gm-warn);
+}
+
+/* Source badges (local / registry id / disabled). */
+.gm-picker-badge {
+  font-family: var(--gm-font-mono);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--gm-line);
+  color: var(--gm-ink-soft);
+  background: var(--gm-code);
+  white-space: nowrap;
+}
+.gm-picker-badge--local {
+  border-color: var(--gm-ok);
+  color: var(--gm-ok);
+  background: color-mix(in srgb, var(--gm-ok) 12%, transparent);
+}
+.gm-picker-badge--registry {
+  border-color: var(--gm-copper);
+  color: var(--gm-copper);
+  background: color-mix(in srgb, var(--gm-copper) 10%, transparent);
+}
+
+/* Version + capability chips. */
+.gm-picker-ver {
+  font-family: var(--gm-font-mono);
+  font-size: 10px;
+  color: var(--gm-ink-soft);
+}
+.gm-picker-caps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.gm-picker-cap {
+  font-family: var(--gm-font-mono);
+  font-size: 9.5px;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--gm-code);
+  border: 1px solid var(--gm-line);
+  color: var(--gm-ink-soft);
+}
+
+.gm-picker-empty {
+  font-size: 12.5px;
+  color: var(--gm-ink-soft);
+  background: var(--gm-code);
+  border: 1px dashed var(--gm-line);
+  border-radius: 9px;
+  padding: 11px 14px;
+}
+.gm-picker-error {
+  color: var(--gm-warn);
+  font-size: 12.5px;
+}
+
+/* Register form + buttons (acknowledged + dev sections). */
+.gm-picker-register {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.gm-picker-register input {
+  flex: 1;
+  padding: 9px 12px;
+  border: 1px solid var(--gm-line);
+  border-radius: 8px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  font: inherit;
+  font-size: 14px;
+}
+.gm-picker-btn {
+  font: inherit;
+  font-size: 13px;
+  padding: 9px 14px;
+  border: 1px solid var(--gm-line);
+  border-radius: 8px;
+  background: var(--gm-card);
+  color: var(--gm-ink);
+  cursor: pointer;
+}
+.gm-picker-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.gm-picker-btn-primary {
+  border-color: var(--gm-copper);
+  background: var(--gm-copper);
+  color: #fff;
+}
+.gm-picker-card-remove {
+  position: absolute;
+  top: 8px;
+  right: 10px;
+  font: inherit;
+  font-size: 11px;
+  border: none;
+  background: none;
+  color: var(--gm-ink-soft);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.gm-picker-card-remove:hover {
+  color: var(--gm-warn);
+}
+
+/* Disclaimer block (acknowledged registration + dev gate). */
+.gm-picker-ack {
+  border: 1px dashed var(--gm-amber);
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--gm-amber) 8%, var(--gm-card));
+  padding: 14px 16px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--gm-ink);
+}
+.gm-picker-ack b {
+  color: var(--gm-copper);
+}
+.gm-picker-ackbtn {
+  margin-top: 10px;
+}
+.gm-picker-ackline {
+  display: flex;
+  gap: 8px;
+  align-items: flex-start;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--gm-ink-soft);
+}
+.gm-picker-ackline input {
+  margin-top: 2px;
+  flex: none;
+}
+.gm-picker-ackline b {
+  color: var(--gm-copper);
+}
