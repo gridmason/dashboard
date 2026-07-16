@@ -20,16 +20,21 @@ import { expect, test } from '@playwright/test';
 
 const CANVAS = 'gm-page-canvas[aria-label="Page canvas — grid of widgets"]';
 
-test('the dev-sideload Add-widget affordance is absent in a production build', async ({ page }) => {
+test('the dev-sideload section is absent from the production Add-widget picker', async ({ page }) => {
   await page.goto('/');
   await expect(page.locator(CANVAS).locator('.grid-stack-item')).toHaveCount(4);
 
-  // Enter edit mode — where the dev build would surface the sideload picker.
+  // Enter edit mode — the Add-widget picker is a production surface (#85)…
   await page.getByRole('button', { name: 'Edit layout' }).click();
   await expect(page.getByText('Editing layout')).toBeVisible();
+  await page.getByRole('button', { name: 'Add widget' }).click();
+  const picker = page.getByRole('dialog', { name: 'Add widget' });
+  await expect(picker).toBeVisible();
+  await expect(picker.getByText('First-party widgets')).toBeVisible();
 
-  // The dev-only Add-widget button and any sideload badge must not exist.
-  await expect(page.getByRole('button', { name: 'Add widget' })).toHaveCount(0);
+  // …but the dev-only sideload section and any sideload badge must not exist.
+  await expect(picker.locator('.gm-devsl')).toHaveCount(0);
+  await expect(picker.getByText('enable dev sideload')).toHaveCount(0);
   await expect(page.locator('.gm-sideload-badge')).toHaveCount(0);
 });
 

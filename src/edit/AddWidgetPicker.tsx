@@ -301,7 +301,7 @@ function AcknowledgedSection({ onClose }: { onClose: () => void }): React.JSX.El
               <button type="button" className="gm-picker-card" disabled={busy} onClick={() => void place(remote)}>
                 <span className="gm-picker-cn">
                   {remote.name}{' '}
-                  <span className="gm-picker-badge">{ACKNOWLEDGED_BADGE_LABEL}</span>
+                  <span className="gm-picker-badge gm-ack-badge">{ACKNOWLEDGED_BADGE_LABEL}</span>
                 </span>
                 <span className="gm-picker-cs">sideload · {remote.origin}</span>
                 <span className="gm-picker-cd">

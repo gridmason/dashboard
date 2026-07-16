@@ -51,7 +51,7 @@ async function register(picker: import('@playwright/test').Locator) {
   await picker.getByLabel('Acknowledged remote URL').fill(ACK_ORIGIN);
   await picker.getByLabel('Acknowledge unreviewed code').check();
   await picker.getByRole('button', { name: 'Acknowledge remote' }).click();
-  const card = picker.locator('.gm-sl-card', { hasText: 'Acked Notes' });
+  const card = picker.locator('.gm-picker-card-wrap', { hasText: 'Acked Notes' });
   await expect(card).toBeVisible();
   return card;
 }
@@ -70,7 +70,7 @@ test('registers by URL + acknowledgement, mounts with the distinct badge, and pe
   await expect(card.locator('.gm-sideload-badge')).toHaveCount(0);
 
   // Place it — the remote hot-loads onto the governed canvas, hash-verified.
-  await card.click();
+  await card.locator('.gm-picker-card').click();
   await expect(picker).toBeHidden();
   await expect(canvas.getByTestId('ack-note')).toHaveText('Acknowledged Notes');
   // The mounted card is marked distinctly (badge on the card too — SPEC §4).
@@ -82,7 +82,7 @@ test('registers by URL + acknowledgement, mounts with the distinct badge, and pe
   await expect(canvas.locator('.grid-stack-item')).toHaveCount(4);
   await expect(canvas.getByTestId('ack-note')).toHaveCount(0);
   const reopened = await openPicker(page);
-  await expect(reopened.locator('.gm-sl-card', { hasText: 'Acked Notes' })).toBeVisible();
+  await expect(reopened.locator('.gm-picker-card-wrap', { hasText: 'Acked Notes' })).toBeVisible();
 });
 
 test('refuses to mount a tampered remote whose content no longer matches its pin', async ({ page }) => {
@@ -102,8 +102,8 @@ test('refuses to mount a tampered remote whose content no longer matches its pin
 
   // Placing now fetches the tampered entry: its hash no longer matches the pin, so
   // the load is refused — the widget never mounts and the picker surfaces the error.
-  await picker.locator('.gm-sl-card', { hasText: 'Acked Notes' }).click();
-  await expect(picker.locator('.gm-sl-error')).toBeVisible();
+  await picker.locator('.gm-picker-card-wrap', { hasText: 'Acked Notes' }).locator('.gm-picker-card').click();
+  await expect(picker.locator('.gm-picker-error')).toBeVisible();
   await expect(picker).toBeVisible(); // stayed open — the place did not complete
   await expect(canvas.getByTestId('ack-note')).toHaveCount(0);
 
